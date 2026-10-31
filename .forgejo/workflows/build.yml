@@ -25,8 +25,10 @@ jobs:
 
       - name: Install Linux system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          if command -v sudo >/dev/null 2>&1; then SUDO="sudo"; else SUDO=""; fi
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends \
+            curl \
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxcb1-dev \
@@ -35,13 +37,19 @@ jobs:
             build-essential
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Run test suite
-        run: cargo test --workspace
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test --workspace
 
       - name: Build release binary
-        run: cargo build --release -p strata-app
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --release -p strata-app
 
       - name: Package Linux artifact
         run: |
@@ -63,22 +71,25 @@ jobs:
 
       - name: Install MinGW and WiX tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          if command -v sudo >/dev/null 2>&1; then SUDO="sudo"; else SUDO=""; fi
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends \
+            curl \
             gcc-mingw-w64-x86-64 \
             g++-mingw-w64-x86-64 \
             wixl
 
       - name: Install Rust toolchain with Windows target
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --target x86_64-pc-windows-gnu
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Cross-compile Windows release binary
         env:
           CFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
           CXXFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           cargo build --release -p strata-app --target x86_64-pc-windows-gnu
 
       - name: Build Windows installer (.msi)
