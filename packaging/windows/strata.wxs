@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="Strata"
+           Language="1033"
+           Version="0.0.1"
+           Manufacturer="Zsombor Simon"
+           UpgradeCode="B5A3C4E5-6D7F-4A9B-8C1D-2E3F4A5B6C7D">
+
+    <Package InstallerVersion="200"
+             Compressed="yes"
+             InstallScope="perMachine" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Strata is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" Title="Strata" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="Strata" />
+      </Directory>
+    </Directory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D">
+        <File Id="StrataExe"
+              Source="dist/strata.exe"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

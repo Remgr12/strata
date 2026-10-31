@@ -47,13 +47,12 @@ jobs:
         run: |
           mkdir -p dist
           cp target/release/strata-app dist/strata-linux
-          tar -czvf strata-linux.tar.gz -C dist strata-linux
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: strata-linux
-          path: strata-linux.tar.gz
+          path: dist/strata-linux
 
   build-windows:
     name: Cross-compile Windows (x86_64)
@@ -62,13 +61,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install MinGW cross-compilation toolchain
+      - name: Install MinGW and WiX tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gcc-mingw-w64-x86-64 \
             g++-mingw-w64-x86-64 \
-            zip
+            wixl
 
       - name: Install Rust toolchain with Windows target
         uses: dtolnay/rust-toolchain@stable
@@ -82,14 +81,16 @@ jobs:
         run: |
           cargo build --release -p strata-app --target x86_64-pc-windows-gnu
 
-      - name: Package Windows artifact
+      - name: Build Windows installer (.msi)
         run: |
           mkdir -p dist
-          cp target/x86_64-pc-windows-gnu/release/strata-app.exe dist/strata-windows.exe
-          zip -j strata-windows.zip dist/strata-windows.exe
+          cp target/x86_64-pc-windows-gnu/release/strata-app.exe dist/strata.exe
+          wixl -o dist/strata.msi packaging/windows/strata.wxs
 
-      - name: Upload Windows artifact
+      - name: Upload Windows artifacts (.exe & .msi)
         uses: actions/upload-artifact@v4
         with:
           name: strata-windows
-          path: strata-windows.zip
+          path: |
+            dist/strata.exe
+            dist/strata.msi
