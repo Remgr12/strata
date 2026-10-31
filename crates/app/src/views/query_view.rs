@@ -61,7 +61,7 @@ impl Render for QueryView {
                                     .bg(rgb(0x313244))
                                     .text_xs()
                                     .text_color(rgb(0xa6e3a1))
-                                    .child(format!("⚡ {}ms", ms))
+                                    .child(format!("{}ms", ms))
                             } else {
                                 div().text_xs().text_color(rgb(0x6c7086)).child("Ready")
                             }),
@@ -124,12 +124,12 @@ impl Render for QueryView {
                             .text_xs()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(rgb(0xf38ba8))
-                            .child(format!("❌ {}", err))
+                            .child(format!("Error: {}", err))
                     } else if let Some(status) = status_message {
                         div()
                             .text_xs()
                             .text_color(rgb(0xa6adc8))
-                            .child(format!("ℹ️ {}", status))
+                            .child(status)
                     } else {
                         div()
                     },

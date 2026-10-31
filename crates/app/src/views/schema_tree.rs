@@ -264,7 +264,6 @@ impl Render for SchemaTreeView {
                                                                 }
                                                             }))
                                                     )
-                                                    .child("📊")
                                                     .child(
                                                         div()
                                                             .font_weight(

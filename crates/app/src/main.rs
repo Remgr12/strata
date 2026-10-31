@@ -146,7 +146,7 @@ impl Render for MainView {
                                     })
                                     .text_xs()
                                     .text_color(rgb(0xcdd6f4))
-                                    .child("📊 Data Grid & SQL")
+                                    .child("Data Grid & SQL")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -168,7 +168,7 @@ impl Render for MainView {
                                     })
                                     .text_xs()
                                     .text_color(rgb(0xcdd6f4))
-                                    .child("🔄 Schema Diff & Migrations")
+                                    .child("Schema Diff & Migrations")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {

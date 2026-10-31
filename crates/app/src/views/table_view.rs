@@ -101,7 +101,6 @@ impl Render for TableView {
                             .flex_col()
                             .items_center()
                             .gap_2()
-                            .child("⚡")
                             .child(
                                 div()
                                     .text_sm()

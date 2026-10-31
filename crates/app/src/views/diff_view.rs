@@ -106,9 +106,9 @@ impl Render for DiffView {
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(rgb(0x11111b))
                                     .child(if has_snapshot {
-                                        "📸 Re-take Snapshot"
+                                        "Re-take Snapshot"
                                     } else {
-                                        "📸 Take Schema Snapshot"
+                                        "Take Schema Snapshot"
                                     })
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
