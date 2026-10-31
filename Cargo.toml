@@ -1,0 +1,32 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/app",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+authors = ["Zsombor Simon <zsombor@mailbox.org>"]
+license = "MIT"
+repository = "https://git.soventa.tech/moha/strata"
+
+[workspace.dependencies]
+async-trait = "0.1"
+anyhow = "1.0"
+thiserror = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+arrow = { version = "60.1", default-features = false }
+arrow-array = "60.1"
+arrow-schema = "60.1"
+rusqlite = { version = "0.33", features = ["bundled", "blob"] }
+duckdb = { version = "1.20000.1", features = ["bundled", "vtab-arrow"] }
+log = "0.4"
+env_logger = "0.11"
+gpui = "0.2.2"
+futures = "0.3"
+
+[patch.crates-io]
+xattr = { path = "patches/xattr" }
