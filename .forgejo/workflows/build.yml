@@ -1,0 +1,95 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libxcb1-dev \
+            libfreetype6-dev \
+            pkg-config \
+            build-essential
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run test suite
+        run: cargo test --workspace
+
+      - name: Build release binary
+        run: cargo build --release -p strata-app
+
+      - name: Package Linux artifact
+        run: |
+          mkdir -p dist
+          cp target/release/strata-app dist/strata-linux
+          tar -czvf strata-linux.tar.gz -C dist strata-linux
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: strata-linux
+          path: strata-linux.tar.gz
+
+  build-windows:
+    name: Cross-compile Windows (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install MinGW cross-compilation toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-mingw-w64-x86-64 \
+            g++-mingw-w64-x86-64 \
+            zip
+
+      - name: Install Rust toolchain with Windows target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - name: Cross-compile Windows release binary
+        env:
+          CFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
+          CXXFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
+        run: |
+          cargo build --release -p strata-app --target x86_64-pc-windows-gnu
+
+      - name: Package Windows artifact
+        run: |
+          mkdir -p dist
+          cp target/x86_64-pc-windows-gnu/release/strata-app.exe dist/strata-windows.exe
+          zip -j strata-windows.zip dist/strata-windows.exe
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: strata-windows
+          path: strata-windows.zip
