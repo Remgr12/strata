@@ -32,7 +32,13 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxcb1-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxcb-xkb-dev \
             libfreetype6-dev \
+            libfontconfig1-dev \
+            libvulkan-dev \
             pkg-config \
             build-essential
 
@@ -72,7 +78,9 @@ jobs:
             curl \
             gcc-mingw-w64-x86-64 \
             g++-mingw-w64-x86-64 \
-            wixl
+            wixl \
+            pkg-config \
+            build-essential
 
       - name: Install Rust toolchain with Windows target
         run: |
@@ -97,6 +105,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: strata-windows
-          path: |
-            dist/strata.exe
-            dist/strata.msi
+          path: dist/
