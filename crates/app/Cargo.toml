@@ -20,3 +20,7 @@ arrow-schema.workspace = true
 log.workspace = true
 env_logger.workspace = true
 futures.workspace = true
+
+[build-dependencies]
+embed-resource = "3.0"
+

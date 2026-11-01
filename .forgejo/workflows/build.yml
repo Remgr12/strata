@@ -138,7 +138,7 @@ jobs:
           x86_64-w64-mingw32-strip dist/strata.exe dist/libstdc++-6.dll dist/libgcc_s_seh-1.dll dist/libwinpthread-1.dll
           VERSION="${GITHUB_REF_NAME#v}"
           if [ -n "$VERSION" ] && [ "$VERSION" != "$GITHUB_REF_NAME" ]; then
-            sed -i "s/Version=\"[^\"]*\"/Version=\"$VERSION\"/g" packaging/windows/strata.wxs
+            sed -i "s/^[[:space:]]*Version=\"[^\"]*\"/           Version=\"$VERSION\"/" packaging/windows/strata.wxs
           fi
           wixl -a x64 --ext ui -I packaging/windows -o dist/strata.msi packaging/windows/strata.wxs
 

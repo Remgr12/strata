@@ -3,11 +3,11 @@
   <Product Id="*"
            Name="Strata"
            Language="1033"
-           Version="0.0.3"
+           Version="0.0.3.1"
            Manufacturer="Zsombor Simon"
            UpgradeCode="B5A3C4E5-6D7F-4A9B-8C1D-2E3F4A5B6C7D">
 
-    <Package InstallerVersion="200"
+    <Package InstallerVersion="500"
              Compressed="yes"
              InstallScope="perMachine" />
 
