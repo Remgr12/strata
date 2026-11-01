@@ -47,6 +47,18 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
+      - name: Cache Cargo dependencies and target
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-linux-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-linux-
+
       - name: Build release binary
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
@@ -76,6 +88,7 @@ jobs:
           $SUDO apt-get update
           $SUDO apt-get install -y --no-install-recommends \
             curl \
+            python3 \
             gcc-mingw-w64-x86-64 \
             g++-mingw-w64-x86-64 \
             wixl \
@@ -89,8 +102,29 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --target x86_64-pc-windows-gnu
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
+      - name: Cache Cargo dependencies and target
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-windows-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-windows-
+
+      - name: Patch GPUI for Windows cross-compilation
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch --target x86_64-pc-windows-gnu
+          bash scripts/patch-gpui.sh
+
       - name: Cross-compile Windows release binary
         env:
+          CC_x86_64_pc_windows_gnu: "x86_64-w64-mingw32-gcc-posix"
+          CXX_x86_64_pc_windows_gnu: "x86_64-w64-mingw32-g++-posix"
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: "x86_64-w64-mingw32-gcc-posix"
           CFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
           CXXFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
         run: |
