@@ -24,6 +24,7 @@ jobs:
           $SUDO apt-get update
           $SUDO apt-get install -y --no-install-recommends \
             curl \
+            zstd \
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxcb1-dev \
@@ -86,6 +87,7 @@ jobs:
           $SUDO apt-get install -y --no-install-recommends \
             curl \
             python3 \
+            zstd \
             gcc-mingw-w64-x86-64 \
             g++-mingw-w64-x86-64 \
             wixl \
