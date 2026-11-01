@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.0.7" date="2026-11-01">
+      <description>
+        <p>Top-left File/View/Settings menu bar, GPUI animations, interactive column sorting, Row Detail Inspector, CSV/JSON export, SQL syntax highlighting and formatter, schema search filter, and multi-statement SQL execution.</p>
+      </description>
+    </release>
     <release version="0.0.6" date="2026-11-01">
       <description>
         <p>Material Design 3 UI redesign, custom theme studio with Hazy Aerostat Blue-Gray / Steel Indigo / Soft Dried Apricot / Faded Ice Cyan default palette, and Windows window modifier fixes.</p>

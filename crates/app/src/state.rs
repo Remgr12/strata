@@ -1,7 +1,10 @@
 use crate::theme::{CustomThemeConfig, ThemePalette, ThemeTokenField};
+use crate::views::table_view::format_arrow_cell;
 use arrow::record_batch::RecordBatch;
 use gpui::prelude::*;
 use gpui::*;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use strata_core::{
@@ -14,6 +17,19 @@ use strata_core::{
 pub enum ActiveTab {
     QueryAndData,
     SchemaDiff,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TopMenu {
+    File,
+    View,
+    Settings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsSection {
+    General,
+    Themes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,12 +46,73 @@ pub enum UpdateState {
     Error(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPreferences {
+    pub show_sidebar: bool,
+    pub show_sql_editor: bool,
+    pub compact_grid: bool,
+    pub default_row_limit: usize,
+    pub auto_query_on_select: bool,
+    pub recent_files: Vec<String>,
+}
+
+impl Default for UserPreferences {
+    fn default() -> Self {
+        Self {
+            show_sidebar: true,
+            show_sql_editor: true,
+            compact_grid: false,
+            default_row_limit: 100,
+            auto_query_on_select: true,
+            recent_files: Vec::new(),
+        }
+    }
+}
+
+impl UserPreferences {
+    pub fn config_path() -> Option<PathBuf> {
+        let base = if cfg!(target_os = "windows") {
+            std::env::var_os("APPDATA").map(PathBuf::from)
+        } else {
+            std::env::var_os("XDG_CONFIG_HOME")
+                .map(PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+        }?;
+        Some(base.join("strata").join("preferences.json"))
+    }
+
+    pub fn load_or_default() -> Self {
+        if let Some(path) = Self::config_path() {
+            if let Ok(raw) = std::fs::read_to_string(path) {
+                if let Ok(prefs) = serde_json::from_str::<UserPreferences>(&raw) {
+                    return prefs;
+                }
+            }
+        }
+        Self::default()
+    }
+
+    pub fn save_to_disk(&self) {
+        if let Some(path) = Self::config_path() {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Ok(json) = serde_json::to_string_pretty(self) {
+                let _ = std::fs::write(path, json);
+            }
+        }
+    }
+}
+
 pub struct AppState {
     pub active_driver: Option<Arc<futures::lock::Mutex<Box<dyn DatabaseDriver>>>>,
     pub file_path: Option<String>,
     pub engine_type: String,
     pub schema: Option<DatabaseSchema>,
     pub query_buffer: String,
+    pub query_cursor: usize,
+    pub query_history: Vec<String>,
+    pub history_index: Option<usize>,
     pub query_results: Option<Vec<RecordBatch>>,
     pub execution_time_ms: Option<u128>,
     pub is_executing: bool,
@@ -45,6 +122,24 @@ pub struct AppState {
     pub active_tab: ActiveTab,
     pub selected_table: Option<String>,
     pub selected_row: Option<usize>,
+    pub sort_column: Option<String>,
+    pub sort_ascending: bool,
+
+    // Sidebar schema search filter
+    pub schema_filter: String,
+
+    // Upper-left toolbar menu & view/general settings
+    pub active_top_menu: Option<TopMenu>,
+    pub show_sidebar: bool,
+    pub show_sql_editor: bool,
+    pub compact_grid: bool,
+    pub default_row_limit: usize,
+    pub auto_query_on_select: bool,
+    pub recent_files: Vec<String>,
+
+    // Animation sequence counters
+    pub view_transition_seq: usize,
+    pub result_seq: usize,
 
     // Diff view state
     pub snapshot_schema: Option<DatabaseSchema>,
@@ -58,9 +153,10 @@ pub struct AppState {
     pub update_state: UpdateState,
     pub last_update_check: Option<UpdateCheckResult>,
 
-    // Theme & customizer state
+    // Theme & Settings drawer state
     pub theme: ThemePalette,
     pub show_theme_editor: bool,
+    pub settings_section: SettingsSection,
     pub editing_theme_field: ThemeTokenField,
     pub theme_hex_input: String,
 }
@@ -69,6 +165,7 @@ impl AppState {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let current_version = env!("CARGO_PKG_VERSION").to_string();
         let theme = ThemePalette::load_persisted_or_default();
+        let prefs = UserPreferences::load_or_default();
         let initial_hex = theme.get_field_hex(ThemeTokenField::Substrate);
 
         let mut state = Self {
@@ -76,7 +173,10 @@ impl AppState {
             file_path: None,
             engine_type: "None".to_string(),
             schema: None,
-            query_buffer: "SELECT 1 AS id, 'Strata' AS workspace, 'Ready' AS status;".to_string(),
+            query_buffer: String::new(),
+            query_cursor: 0,
+            query_history: Vec::new(),
+            history_index: None,
             query_results: None,
             execution_time_ms: None,
             is_executing: false,
@@ -86,6 +186,18 @@ impl AppState {
             active_tab: ActiveTab::QueryAndData,
             selected_table: None,
             selected_row: None,
+            sort_column: None,
+            sort_ascending: true,
+            schema_filter: String::new(),
+            active_top_menu: None,
+            show_sidebar: prefs.show_sidebar,
+            show_sql_editor: prefs.show_sql_editor,
+            compact_grid: prefs.compact_grid,
+            default_row_limit: prefs.default_row_limit,
+            auto_query_on_select: prefs.auto_query_on_select,
+            recent_files: prefs.recent_files,
+            view_transition_seq: 1,
+            result_seq: 1,
             snapshot_schema: None,
             snapshot_label: None,
             schema_diff: None,
@@ -96,12 +208,114 @@ impl AppState {
             last_update_check: None,
             theme,
             show_theme_editor: false,
+            settings_section: SettingsSection::Themes,
             editing_theme_field: ThemeTokenField::Substrate,
             theme_hex_input: initial_hex,
         };
 
         state.start_periodic_update_checker(cx);
         state
+    }
+
+    pub fn save_preferences(&self) {
+        let prefs = UserPreferences {
+            show_sidebar: self.show_sidebar,
+            show_sql_editor: self.show_sql_editor,
+            compact_grid: self.compact_grid,
+            default_row_limit: self.default_row_limit,
+            auto_query_on_select: self.auto_query_on_select,
+            recent_files: self.recent_files.clone(),
+        };
+        prefs.save_to_disk();
+    }
+
+    pub fn record_recent_file(&mut self, path: &str) {
+        if path.is_empty() || path.starts_with(":memory:") {
+            return;
+        }
+        self.recent_files.retain(|p| p != path);
+        self.recent_files.insert(0, path.to_string());
+        if self.recent_files.len() > 6 {
+            self.recent_files.truncate(6);
+        }
+        self.save_preferences();
+    }
+
+    pub fn toggle_top_menu(&mut self, menu: TopMenu, cx: &mut Context<Self>) {
+        if self.active_top_menu == Some(menu) {
+            self.active_top_menu = None;
+        } else {
+            self.active_top_menu = Some(menu);
+        }
+        cx.notify();
+    }
+
+    pub fn close_top_menu(&mut self, cx: &mut Context<Self>) {
+        if self.active_top_menu.is_some() {
+            self.active_top_menu = None;
+            cx.notify();
+        }
+    }
+
+    pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        self.show_sidebar = !self.show_sidebar;
+        self.active_top_menu = None;
+        self.save_preferences();
+        cx.notify();
+    }
+
+    pub fn toggle_sql_editor(&mut self, cx: &mut Context<Self>) {
+        self.show_sql_editor = !self.show_sql_editor;
+        self.active_top_menu = None;
+        self.save_preferences();
+        cx.notify();
+    }
+
+    pub fn toggle_compact_grid(&mut self, cx: &mut Context<Self>) {
+        self.compact_grid = !self.compact_grid;
+        self.active_top_menu = None;
+        self.save_preferences();
+        cx.notify();
+    }
+
+    pub fn cycle_default_row_limit(&mut self, cx: &mut Context<Self>) {
+        self.default_row_limit = match self.default_row_limit {
+            100 => 500,
+            500 => 1000,
+            _ => 100,
+        };
+        self.save_preferences();
+        cx.notify();
+    }
+
+    pub fn toggle_auto_query_on_select(&mut self, cx: &mut Context<Self>) {
+        self.auto_query_on_select = !self.auto_query_on_select;
+        self.save_preferences();
+        cx.notify();
+    }
+
+    pub fn open_settings_drawer(&mut self, section: SettingsSection, cx: &mut Context<Self>) {
+        self.settings_section = section;
+        self.show_theme_editor = true;
+        self.active_top_menu = None;
+        self.theme_hex_input = self.theme.get_field_hex(self.editing_theme_field);
+        cx.notify();
+    }
+
+    pub fn close_connection(&mut self, cx: &mut Context<Self>) {
+        self.active_driver = None;
+        self.file_path = None;
+        self.engine_type = "None".to_string();
+        self.schema = None;
+        self.query_results = None;
+        self.selected_table = None;
+        self.selected_row = None;
+        self.sort_column = None;
+        self.execution_time_ms = None;
+        self.status_message = None;
+        self.error_message = None;
+        self.active_top_menu = None;
+        cx.notify();
     }
 
     pub fn toggle_light_dark_theme(&mut self, cx: &mut Context<Self>) {
@@ -124,6 +338,7 @@ impl AppState {
 
     pub fn toggle_theme_editor(&mut self, cx: &mut Context<Self>) {
         self.show_theme_editor = !self.show_theme_editor;
+        self.active_top_menu = None;
         if self.show_theme_editor {
             self.theme_hex_input = self.theme.get_field_hex(self.editing_theme_field);
         }
@@ -200,6 +415,7 @@ impl AppState {
     }
 
     pub fn prompt_import_theme(&mut self, cx: &mut Context<Self>) {
+        self.active_top_menu = None;
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -215,6 +431,36 @@ impl AppState {
                         state.load_theme_from_file(&path_str, cx);
                     });
                 }
+            }
+        })
+        .detach();
+    }
+
+    pub fn prompt_export_theme(&mut self, cx: &mut Context<Self>) {
+        self.active_top_menu = None;
+        let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let receiver = cx.prompt_for_new_path(&dir, Some("strata-theme.json"));
+        let json_res = serde_json::to_string_pretty(&self.theme.to_custom_config());
+
+        cx.spawn(async move |this, cx| {
+            if let Ok(Ok(Some(path))) = receiver.await {
+                let _ = this.update(cx, |state, cx| {
+                    match &json_res {
+                        Ok(json) => match std::fs::write(&path, json) {
+                            Ok(()) => {
+                                state.status_message =
+                                    Some(format!("Exported theme to {}", path.display()));
+                            }
+                            Err(e) => {
+                                state.error_message = Some(format!("Export failed: {}", e));
+                            }
+                        },
+                        Err(e) => {
+                            state.error_message = Some(format!("Serialize error: {}", e));
+                        }
+                    }
+                    cx.notify();
+                });
             }
         })
         .detach();
@@ -276,6 +522,7 @@ impl AppState {
 
     /// Trigger an immediate update check against the Forgejo releases endpoint.
     pub fn check_updates_now(&mut self, cx: &mut Context<Self>) {
+        self.active_top_menu = None;
         self.update_state = UpdateState::Checking;
         cx.notify();
 
@@ -346,13 +593,14 @@ impl AppState {
         .detach();
     }
 
-    /// Open native OS file picker dialog to load a database file.
+    /// Open native OS file picker dialog to load a database, Parquet, or CSV file.
     pub fn prompt_open_file(&mut self, cx: &mut Context<Self>) {
+        self.active_top_menu = None;
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some("Open Database or Parquet File".into()),
+            prompt: Some("Open SQLite, DuckDB, Parquet, or CSV File".into()),
         });
 
         cx.spawn(async move |this, cx| {
@@ -370,6 +618,7 @@ impl AppState {
 
     /// Open native OS file picker dialog to select a baseline database file for schema comparison.
     pub fn prompt_compare_file(&mut self, cx: &mut Context<Self>) {
+        self.active_top_menu = None;
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -381,10 +630,13 @@ impl AppState {
             if let Ok(Ok(Some(paths))) = receiver.await {
                 if let Some(first) = paths.into_iter().next() {
                     let path_str = first.to_string_lossy().to_string();
-                    let is_duck = path_str.ends_with(".duckdb")
-                        || path_str.ends_with(".ddb")
-                        || path_str.ends_with(".parquet")
-                        || path_str.ends_with(".pq");
+                    let lower = path_str.to_ascii_lowercase();
+                    let is_duck = lower.ends_with(".duckdb")
+                        || lower.ends_with(".ddb")
+                        || lower.ends_with(".parquet")
+                        || lower.ends_with(".pq")
+                        || lower.ends_with(".csv")
+                        || lower.ends_with(".tsv");
 
                     let compare_res: Result<DatabaseSchema, String> = async {
                         let mut driver: Box<dyn DatabaseDriver> = if is_duck {
@@ -428,32 +680,38 @@ impl AppState {
         .detach();
     }
 
-    /// Load a database or parquet file by path.
+    /// Load a database, Parquet, or CSV/TSV file by path.
     pub fn load_file(&mut self, path: String, cx: &mut Context<Self>) {
-        if path.ends_with(".json") {
+        self.active_top_menu = None;
+        if path.to_ascii_lowercase().ends_with(".json") {
             self.load_theme_from_file(&path, cx);
             return;
         }
 
+        self.record_recent_file(&path);
         self.is_loading_schema = true;
         self.error_message = None;
         self.selected_row = None;
+        self.sort_column = None;
         self.file_path = Some(path.clone());
 
-        let is_duckdb_or_parquet = path.ends_with(".duckdb")
-            || path.ends_with(".ddb")
-            || path.ends_with(".parquet")
-            || path.ends_with(".pq");
+        let lower = path.to_ascii_lowercase();
+        let is_parquet = lower.ends_with(".parquet") || lower.ends_with(".pq");
+        let is_csv = lower.ends_with(".csv") || lower.ends_with(".tsv");
+        let is_duckdb_engine =
+            lower.ends_with(".duckdb") || lower.ends_with(".ddb") || is_parquet || is_csv;
 
-        let engine = if path.ends_with(".parquet") || path.ends_with(".pq") {
+        let engine = if is_parquet {
             "Parquet"
-        } else if is_duckdb_or_parquet {
+        } else if is_csv {
+            "CSV"
+        } else if is_duckdb_engine {
             "DuckDB"
         } else {
             "SQLite"
         };
         self.engine_type = engine.to_string();
-        self.diff_dialect = if is_duckdb_or_parquet {
+        self.diff_dialect = if is_duckdb_engine {
             SqlDialect::DuckDb
         } else {
             SqlDialect::Sqlite
@@ -461,7 +719,7 @@ impl AppState {
 
         cx.spawn(async move |this, cx| {
             let connect_result: Result<(Box<dyn DatabaseDriver>, DatabaseSchema), String> = async {
-                let mut driver: Box<dyn DatabaseDriver> = if is_duckdb_or_parquet {
+                let mut driver: Box<dyn DatabaseDriver> = if is_duckdb_engine {
                     Box::new(DuckDbDriver::new())
                 } else {
                     Box::new(SqliteDriver::new())
@@ -497,9 +755,14 @@ impl AppState {
                         ));
                         if let Some(first_tbl) = first_table_name {
                             state.selected_table = Some(first_tbl.clone());
-                            state.query_buffer =
-                                format!("SELECT * FROM \"{}\" LIMIT 100;", first_tbl);
-                            state.execute_query(cx);
+                            let sql = format!(
+                                "SELECT * FROM \"{}\" LIMIT {};",
+                                first_tbl, state.default_row_limit
+                            );
+                            state.set_query_buffer_with_cursor(sql);
+                            if state.auto_query_on_select {
+                                state.execute_query(cx);
+                            }
                         }
                     }
                     Err(err) => {
@@ -513,84 +776,31 @@ impl AppState {
         .detach();
     }
 
-    /// Initialize an interactive in-memory demo database with sample tables and data.
-    pub fn load_demo_workspace(&mut self, cx: &mut Context<Self>) {
+    /// Re-introspect the currently connected database schema.
+    pub fn refresh_schema(&mut self, cx: &mut Context<Self>) {
+        let Some(driver_arc) = self.active_driver.clone() else {
+            return;
+        };
         self.is_loading_schema = true;
-        self.error_message = None;
-        self.selected_row = None;
-        self.file_path = Some(":memory:".to_string());
-        self.engine_type = "SQLite".to_string();
-        self.diff_dialect = SqlDialect::Sqlite;
         cx.notify();
 
         cx.spawn(async move |this, cx| {
-            let init_res: Result<
-                (Box<dyn DatabaseDriver>, DatabaseSchema, DatabaseSchema),
-                String,
-            > = async {
-                let mut driver: Box<dyn DatabaseDriver> = Box::new(SqliteDriver::new());
-                driver
-                    .connect(":memory:")
-                    .await
-                    .map_err(|e| format!("Connection error: {}", e))?;
-
-                let seed_statements = [
-                    "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, plan TEXT NOT NULL, created_at TEXT);",
-                    "CREATE TABLE products (id INTEGER PRIMARY KEY, sku TEXT NOT NULL, title TEXT NOT NULL, price_usd REAL NOT NULL, in_stock INTEGER NOT NULL);",
-                    "INSERT INTO customers VALUES (1, 'Elena Rostova', 'elena@soventa.tech', 'Enterprise', '2026-09-14'), (2, 'Marcus Vance', 'mvance@acme.io', 'Pro', '2026-10-02'), (3, 'Sora Takahashi', 'sora@kumo.jp', 'Enterprise', '2026-10-19'), (4, 'Liam O''Connor', 'liam@dublin.dev', 'Starter', '2026-10-28');",
-                    "INSERT INTO products VALUES (101, 'STR-ENT-01', 'Strata Enterprise Node', 240.00, 1), (102, 'STR-PRO-01', 'Strata Pro Seat', 49.00, 1), (103, 'STR-ARC-02', 'Arrow Columnar Connector', 99.00, 1);",
-                ];
-
-                for stmt in seed_statements {
-                    driver
-                        .execute_query(stmt)
-                        .await
-                        .map_err(|e| format!("Seed error: {}", e))?;
-                }
-
-                let baseline = driver
-                    .introspect_schema()
-                    .await
-                    .map_err(|e| format!("Introspect error: {}", e))?;
-
-                let post_snapshot_statements = [
-                    "CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, product_id INTEGER NOT NULL, quantity INTEGER NOT NULL, total_usd REAL NOT NULL, status TEXT NOT NULL);",
-                    "INSERT INTO orders VALUES (1001, 1, 101, 3, 720.00, 'completed'), (1002, 2, 102, 5, 245.00, 'completed'), (1003, 3, 103, 2, 198.00, 'processing'), (1004, 1, 102, 10, 490.00, 'completed');",
-                ];
-
-                for stmt in post_snapshot_statements {
-                    driver
-                        .execute_query(stmt)
-                        .await
-                        .map_err(|e| format!("Seed error: {}", e))?;
-                }
-
-                let schema = driver
-                    .introspect_schema()
-                    .await
-                    .map_err(|e| format!("Introspection error: {}", e))?;
-
-                Ok((driver, baseline, schema))
-            }
-            .await;
-
+            let schema_res = {
+                let driver = driver_arc.lock().await;
+                driver.introspect_schema().await
+            };
             let _ = this.update(cx, |state, cx| {
                 state.is_loading_schema = false;
-                match init_res {
-                    Ok((driver, baseline, schema)) => {
-                        state.snapshot_schema = Some(baseline);
-                        state.snapshot_label = Some("v1 baseline".to_string());
-                        state.schema = Some(schema);
-                        state.active_driver = Some(Arc::new(futures::lock::Mutex::new(driver)));
+                match schema_res {
+                    Ok(new_schema) => {
+                        let count = new_schema.tables.len();
+                        state.schema = Some(new_schema);
                         state.recompute_diff();
-                        state.selected_table = Some("customers".to_string());
-                        state.query_buffer =
-                            "SELECT id, name, email, plan, created_at FROM customers ORDER BY id;"
-                                .to_string();
-                        state.execute_query(cx);
+                        state.status_message =
+                            Some(format!("Refreshed • {} tables", count));
                     }
-                    Err(err) => {
-                        state.error_message = Some(err);
+                    Err(e) => {
+                        state.error_message = Some(format!("Schema refresh error: {}", e));
                     }
                 }
                 cx.notify();
@@ -614,6 +824,15 @@ impl AppState {
                 return;
             }
         };
+
+        // Record in query history (deduplicating most recent)
+        if self.query_history.first().map(|s| s.as_str()) != Some(sql.as_str()) {
+            self.query_history.insert(0, sql.clone());
+            if self.query_history.len() > 20 {
+                self.query_history.truncate(20);
+            }
+        }
+        self.history_index = None;
 
         self.is_executing = true;
         self.error_message = None;
@@ -652,7 +871,9 @@ impl AppState {
                     Ok(batches) => {
                         let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
                         state.query_results = Some(batches);
-                        state.status_message = Some(format!("{} rows • {} ms", total_rows, elapsed_ms));
+                        state.result_seq = state.result_seq.wrapping_add(1);
+                        state.status_message =
+                            Some(format!("{} rows • {} ms", total_rows, elapsed_ms));
                     }
                     Err(err) => {
                         state.error_message = Some(format!("{}", err));
@@ -664,28 +885,187 @@ impl AppState {
         .detach();
     }
 
+    pub fn set_query_buffer_with_cursor(&mut self, sql: String) {
+        self.query_cursor = sql.chars().count();
+        self.query_buffer = sql;
+    }
+
     /// Set SQL query text and execute immediately.
     pub fn set_query_and_run(&mut self, sql: String, cx: &mut Context<Self>) {
-        self.query_buffer = sql;
+        self.set_query_buffer_with_cursor(sql);
         self.active_tab = ActiveTab::QueryAndData;
         self.execute_query(cx);
     }
 
-    /// Append or insert text into the SQL query buffer.
+    /// Toggle sorting by a column in the data grid.
+    pub fn toggle_sort_column(&mut self, col_name: String, cx: &mut Context<Self>) {
+        if self.sort_column.as_deref() == Some(col_name.as_str()) {
+            if self.sort_ascending {
+                self.sort_ascending = false;
+            } else {
+                self.sort_column = None;
+                self.sort_ascending = true;
+            }
+        } else {
+            self.sort_column = Some(col_name);
+            self.sort_ascending = true;
+        }
+
+        if let Some(tbl) = self.selected_table.clone() {
+            let escaped_tbl = tbl.replace('"', "\"\"");
+            let sql = if let Some(ref col) = self.sort_column {
+                let escaped_col = col.replace('"', "\"\"");
+                let dir = if self.sort_ascending { "ASC" } else { "DESC" };
+                format!(
+                    "SELECT * FROM \"{}\" ORDER BY \"{}\" {} LIMIT {};",
+                    escaped_tbl, escaped_col, dir, self.default_row_limit
+                )
+            } else {
+                format!(
+                    "SELECT * FROM \"{}\" LIMIT {};",
+                    escaped_tbl, self.default_row_limit
+                )
+            };
+            self.set_query_and_run(sql, cx);
+        } else {
+            cx.notify();
+        }
+    }
+
+    /// Insert text at the current cursor position in the SQL query buffer.
     pub fn append_to_query(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.query_buffer.push_str(text);
+        let char_count = self.query_buffer.chars().count();
+        let cursor = self.query_cursor.min(char_count);
+        let byte_idx = self
+            .query_buffer
+            .char_indices()
+            .nth(cursor)
+            .map(|(i, _)| i)
+            .unwrap_or(self.query_buffer.len());
+        self.query_buffer.insert_str(byte_idx, text);
+        self.query_cursor = cursor + text.chars().count();
         cx.notify();
     }
 
-    /// Handle backspace in the SQL query buffer.
+    /// Handle backspace at the current cursor position in the SQL query buffer.
     pub fn backspace_query(&mut self, cx: &mut Context<Self>) {
-        self.query_buffer.pop();
+        let char_count = self.query_buffer.chars().count();
+        let cursor = self.query_cursor.min(char_count);
+        if cursor > 0 {
+            if let Some((byte_idx, _)) = self.query_buffer.char_indices().nth(cursor - 1) {
+                self.query_buffer.remove(byte_idx);
+                self.query_cursor = cursor - 1;
+                cx.notify();
+            }
+        }
+    }
+
+    /// Handle delete (forward delete) at the current cursor position in the SQL query buffer.
+    pub fn delete_at_cursor(&mut self, cx: &mut Context<Self>) {
+        let char_count = self.query_buffer.chars().count();
+        let cursor = self.query_cursor.min(char_count);
+        if cursor < char_count {
+            if let Some((byte_idx, _)) = self.query_buffer.char_indices().nth(cursor) {
+                self.query_buffer.remove(byte_idx);
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn move_cursor_left(&mut self, cx: &mut Context<Self>) {
+        if self.query_cursor > 0 {
+            self.query_cursor -= 1;
+            cx.notify();
+        }
+    }
+
+    pub fn move_cursor_right(&mut self, cx: &mut Context<Self>) {
+        let max_len = self.query_buffer.chars().count();
+        if self.query_cursor < max_len {
+            self.query_cursor += 1;
+            cx.notify();
+        }
+    }
+
+    pub fn move_cursor_home(&mut self, cx: &mut Context<Self>) {
+        self.query_cursor = 0;
+        cx.notify();
+    }
+
+    pub fn move_cursor_end(&mut self, cx: &mut Context<Self>) {
+        self.query_cursor = self.query_buffer.chars().count();
+        cx.notify();
+    }
+
+    /// Cycle through executed query history.
+    pub fn cycle_query_history(&mut self, cx: &mut Context<Self>) {
+        if self.query_history.is_empty() {
+            return;
+        }
+        let next_idx = match self.history_index {
+            None => 0,
+            Some(i) => (i + 1) % self.query_history.len(),
+        };
+        self.history_index = Some(next_idx);
+        let sql = self.query_history[next_idx].clone();
+        self.set_query_buffer_with_cursor(sql);
+        cx.notify();
+    }
+
+    /// Format the current SQL query buffer cleanly with uppercase keywords and clause line breaks.
+    pub fn format_query_buffer(&mut self, cx: &mut Context<Self>) {
+        let raw = self.query_buffer.trim();
+        if raw.is_empty() {
+            return;
+        }
+        let tokens: Vec<&str> = raw.split_whitespace().collect();
+        let major_clauses = [
+            "SELECT", "FROM", "WHERE", "GROUP", "ORDER", "LIMIT", "HAVING", "LEFT", "INNER",
+            "RIGHT", "JOIN", "VALUES", "SET", "UNION",
+        ];
+        let uppercase_kw = [
+            "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "ASC", "DESC", "LIMIT", "OFFSET",
+            "HAVING", "JOIN", "LEFT", "INNER", "RIGHT", "ON", "AS", "AND", "OR", "NOT", "IN",
+            "IS", "NULL", "COUNT", "SUM", "AVG", "MIN", "MAX", "DISTINCT", "INSERT", "INTO",
+            "VALUES", "UPDATE", "SET", "DELETE", "CREATE", "TABLE", "ALTER", "DROP", "VIEW",
+            "INDEX", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "PRAGMA", "DESCRIBE", "SHOW",
+            "WITH", "CASE", "WHEN", "THEN", "ELSE", "END",
+        ];
+
+        let mut out = String::new();
+        for (i, tok) in tokens.iter().enumerate() {
+            let clean = tok.trim_end_matches(';').trim_end_matches(',');
+            let has_semi = tok.ends_with(';');
+            let has_comma = tok.ends_with(',');
+            let upper = clean.to_ascii_uppercase();
+
+            if i > 0 && major_clauses.contains(&upper.as_str()) {
+                out.push('\n');
+            } else if i > 0 {
+                out.push(' ');
+            }
+
+            if uppercase_kw.contains(&upper.as_str()) {
+                out.push_str(&upper);
+            } else {
+                out.push_str(clean);
+            }
+
+            if has_comma {
+                out.push(',');
+            }
+            if has_semi {
+                out.push(';');
+            }
+        }
+        self.set_query_buffer_with_cursor(out);
         cx.notify();
     }
 
     /// Clear the SQL query buffer.
     pub fn clear_query(&mut self, cx: &mut Context<Self>) {
         self.query_buffer.clear();
+        self.query_cursor = 0;
         self.error_message = None;
         cx.notify();
     }
@@ -693,17 +1073,208 @@ impl AppState {
     /// Select a table from the sidebar and query its rows.
     pub fn select_table(&mut self, table_name: String, cx: &mut Context<Self>) {
         self.selected_table = Some(table_name.clone());
-        self.query_buffer = format!("SELECT * FROM \"{}\" LIMIT 100;", table_name);
+        self.sort_column = None;
+        self.sort_ascending = true;
+        let sql = format!(
+            "SELECT * FROM \"{}\" LIMIT {};",
+            table_name.replace('"', "\"\""),
+            self.default_row_limit
+        );
+        self.set_query_buffer_with_cursor(sql);
         self.active_tab = ActiveTab::QueryAndData;
-        self.execute_query(cx);
+        if self.auto_query_on_select {
+            self.execute_query(cx);
+        } else {
+            cx.notify();
+        }
+    }
+
+    /// Serialize the current query results into RFC-4180 CSV format.
+    pub fn results_to_csv(&self) -> Option<String> {
+        let batches = self.query_results.as_ref()?;
+        let first = batches.first()?;
+        let schema = first.schema();
+        let fields = schema.fields();
+
+        let mut csv = String::new();
+        // Header row
+        for (i, f) in fields.iter().enumerate() {
+            if i > 0 {
+                csv.push(',');
+            }
+            let name = f.name();
+            if name.contains(',') || name.contains('"') || name.contains('\n') {
+                csv.push('"');
+                csv.push_str(&name.replace('"', "\"\""));
+                csv.push('"');
+            } else {
+                csv.push_str(name);
+            }
+        }
+        csv.push('\n');
+
+        // Data rows
+        for batch in batches {
+            for r in 0..batch.num_rows() {
+                for c in 0..batch.num_columns() {
+                    if c > 0 {
+                        csv.push(',');
+                    }
+                    let col = batch.column(c);
+                    let (val, is_null, _) = format_arrow_cell(col, r);
+                    if is_null {
+                        continue;
+                    }
+                    if val.contains(',') || val.contains('"') || val.contains('\n') {
+                        csv.push('"');
+                        csv.push_str(&val.replace('"', "\"\""));
+                        csv.push('"');
+                    } else {
+                        csv.push_str(&val);
+                    }
+                }
+                csv.push('\n');
+            }
+        }
+        Some(csv)
+    }
+
+    /// Serialize the current query results into a pretty JSON array of objects.
+    pub fn results_to_json(&self) -> Option<String> {
+        let batches = self.query_results.as_ref()?;
+        let first = batches.first()?;
+        let schema = first.schema();
+        let fields = schema.fields();
+
+        let mut rows_json = Vec::new();
+        for batch in batches {
+            for r in 0..batch.num_rows() {
+                let mut map = serde_json::Map::new();
+                for c in 0..batch.num_columns() {
+                    let col_name = fields[c].name().clone();
+                    let col = batch.column(c);
+                    let (val, is_null, is_numeric) = format_arrow_cell(col, r);
+                    let json_val = if is_null {
+                        serde_json::Value::Null
+                    } else if is_numeric {
+                        if let Ok(i) = val.parse::<i64>() {
+                            serde_json::Value::Number(i.into())
+                        } else if let Ok(f) = val.parse::<f64>() {
+                            serde_json::Number::from_f64(f)
+                                .map(serde_json::Value::Number)
+                                .unwrap_or(serde_json::Value::String(val))
+                        } else {
+                            serde_json::Value::String(val)
+                        }
+                    } else if val == "true" || val == "false" {
+                        serde_json::Value::Bool(val == "true")
+                    } else {
+                        serde_json::Value::String(val)
+                    };
+                    map.insert(col_name, json_val);
+                }
+                rows_json.push(serde_json::Value::Object(map));
+            }
+        }
+        serde_json::to_string_pretty(&rows_json).ok()
+    }
+
+    /// Copy the current query results as CSV to the system clipboard.
+    pub fn copy_results_csv(&mut self, cx: &mut Context<Self>) {
+        if let Some(csv) = self.results_to_csv() {
+            cx.write_to_clipboard(ClipboardItem::new_string(csv));
+            self.status_message = Some("Copied results as CSV".to_string());
+            cx.notify();
+        }
+    }
+
+    /// Copy the current query results as JSON to the system clipboard.
+    pub fn copy_results_json(&mut self, cx: &mut Context<Self>) {
+        if let Some(json) = self.results_to_json() {
+            cx.write_to_clipboard(ClipboardItem::new_string(json));
+            self.status_message = Some("Copied results as JSON".to_string());
+            cx.notify();
+        }
+    }
+
+    /// Prompt user to save current query results to a `.csv` file.
+    pub fn prompt_export_csv(&mut self, cx: &mut Context<Self>) {
+        self.active_top_menu = None;
+        let Some(csv) = self.results_to_csv() else {
+            self.error_message = Some("No query results to export".to_string());
+            cx.notify();
+            return;
+        };
+        let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let default_name = self
+            .selected_table
+            .as_ref()
+            .map(|t| format!("{}.csv", t))
+            .unwrap_or_else(|| "query_results.csv".to_string());
+        let receiver = cx.prompt_for_new_path(&dir, Some(&default_name));
+
+        cx.spawn(async move |this, cx| {
+            if let Ok(Ok(Some(path))) = receiver.await {
+                let _ = this.update(cx, |state, cx| {
+                    match std::fs::write(&path, &csv) {
+                        Ok(()) => {
+                            state.status_message =
+                                Some(format!("Exported CSV to {}", path.display()));
+                        }
+                        Err(e) => {
+                            state.error_message = Some(format!("CSV export failed: {}", e));
+                        }
+                    }
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Prompt user to save current query results to a `.json` file.
+    pub fn prompt_export_json(&mut self, cx: &mut Context<Self>) {
+        self.active_top_menu = None;
+        let Some(json) = self.results_to_json() else {
+            self.error_message = Some("No query results to export".to_string());
+            cx.notify();
+            return;
+        };
+        let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let default_name = self
+            .selected_table
+            .as_ref()
+            .map(|t| format!("{}.json", t))
+            .unwrap_or_else(|| "query_results.json".to_string());
+        let receiver = cx.prompt_for_new_path(&dir, Some(&default_name));
+
+        cx.spawn(async move |this, cx| {
+            if let Ok(Ok(Some(path))) = receiver.await {
+                let _ = this.update(cx, |state, cx| {
+                    match std::fs::write(&path, &json) {
+                        Ok(()) => {
+                            state.status_message =
+                                Some(format!("Exported JSON to {}", path.display()));
+                        }
+                        Err(e) => {
+                            state.error_message = Some(format!("JSON export failed: {}", e));
+                        }
+                    }
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
     }
 
     /// Take a snapshot of the current schema for diffing.
     pub fn take_schema_snapshot(&mut self, cx: &mut Context<Self>) {
+        self.active_top_menu = None;
         if let Some(ref current) = self.schema {
             self.snapshot_schema = Some(current.clone());
             self.snapshot_label = Some(self.short_file_name());
             self.recompute_diff();
+            self.status_message = Some(format!("Snapshot captured: {}", self.short_file_name()));
             cx.notify();
         }
     }
@@ -720,15 +1291,21 @@ impl AppState {
     /// Load the generated migration SQL into the query editor so it can be inspected or run.
     pub fn load_migration_into_editor(&mut self, cx: &mut Context<Self>) {
         if !self.diff_migration_sql.is_empty() {
-            self.query_buffer = self.diff_migration_sql.join("\n\n");
+            let sql = self.diff_migration_sql.join("\n\n");
+            self.set_query_buffer_with_cursor(sql);
             self.active_tab = ActiveTab::QueryAndData;
+            self.view_transition_seq = self.view_transition_seq.wrapping_add(1);
             cx.notify();
         }
     }
 
     /// Switch active tab (Data Grid vs Schema Diff).
     pub fn set_active_tab(&mut self, tab: ActiveTab, cx: &mut Context<Self>) {
-        self.active_tab = tab;
+        if self.active_tab != tab {
+            self.active_tab = tab;
+            self.view_transition_seq = self.view_transition_seq.wrapping_add(1);
+        }
+        self.active_top_menu = None;
         cx.notify();
     }
 

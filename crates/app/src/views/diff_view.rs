@@ -1,6 +1,7 @@
 use crate::state::AppState;
 use gpui::prelude::*;
 use gpui::*;
+use std::time::Duration;
 use strata_core::SqlDialect;
 
 pub struct DiffView {
@@ -281,6 +282,7 @@ impl Render for DiffView {
                                     .text_xs()
                                     .text_color(theme.text_muted_rgb())
                                     .child("No baseline snapshot")
+                                    .into_any_element()
                             } else if diff.map(|d| d.is_empty()).unwrap_or(true) {
                                 div()
                                     .p_6()
@@ -292,6 +294,7 @@ impl Render for DiffView {
                                     .text_xs()
                                     .text_color(theme.telemetry_rgb())
                                     .child("Schemas match")
+                                    .into_any_element()
                             } else {
                                 let mut diff_cards = Vec::new();
                                 let d = diff.unwrap();
@@ -434,7 +437,23 @@ impl Render for DiffView {
                                     );
                                 }
 
-                                div().flex().flex_col().children(diff_cards)
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .children(diff_cards)
+                                    .with_animation(
+                                        ElementId::Name(
+                                            format!(
+                                                "diff-cards-{}-{}-{}",
+                                                added_count, dropped_count, altered_count
+                                            )
+                                            .into(),
+                                        ),
+                                        Animation::new(Duration::from_millis(200))
+                                            .with_easing(ease_out_quint()),
+                                        |el, delta| el.opacity(delta),
+                                    )
+                                    .into_any_element()
                             }),
                     )
                     .child(

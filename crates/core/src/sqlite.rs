@@ -63,9 +63,9 @@ impl DatabaseDriver for SqliteDriver {
 
         let mut tables = Vec::new();
 
-        // 1. Fetch user tables
+        // 1. Fetch user tables and views
         let mut table_stmt = conn.prepare(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;",
+            "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name;",
         )?;
         let table_names: Vec<String> = table_stmt
             .query_map([], |row| row.get::<_, String>(0))?
@@ -220,15 +220,33 @@ impl DatabaseDriver for SqliteDriver {
         let conn = conn_arc.lock().map_err(|e| e.to_string())?;
 
         let trimmed = sql.trim();
-        let upper = trimmed.to_uppercase();
+        let statements: Vec<&str> = trimmed
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        if statements.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // If multiple statements are present, execute all leading statements as a batch first
+        if statements.len() > 1 {
+            let prefix_sql = format!("{};", statements[..statements.len() - 1].join(";\n"));
+            conn.execute_batch(&prefix_sql)?;
+        }
+
+        let final_stmt = statements[statements.len() - 1];
+        let upper = final_stmt.to_uppercase();
 
         let is_select = upper.starts_with("SELECT")
             || upper.starts_with("PRAGMA")
             || upper.starts_with("EXPLAIN")
-            || upper.starts_with("WITH");
+            || upper.starts_with("WITH")
+            || upper.starts_with("VALUES");
 
         if is_select {
-            let mut stmt = conn.prepare(trimmed)?;
+            let mut stmt = conn.prepare(final_stmt)?;
             let col_count = stmt.column_count();
             let col_names: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
 
@@ -348,7 +366,7 @@ impl DatabaseDriver for SqliteDriver {
             Ok(vec![batch])
         } else {
             // DDL or DML statement (INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, etc.)
-            let affected = conn.execute(trimmed, [])?;
+            let affected = conn.execute(final_stmt, [])?;
 
             let mut status_builder = StringBuilder::with_capacity(1, 16);
             status_builder.append_value("SUCCESS");

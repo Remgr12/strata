@@ -40,9 +40,11 @@ impl Default for DuckDbDriver {
 #[async_trait::async_trait]
 impl DatabaseDriver for DuckDbDriver {
     async fn connect(&mut self, path: &str) -> DriverResult<()> {
-        let is_parquet = path.ends_with(".parquet") || path.ends_with(".pq");
+        let lower = path.to_ascii_lowercase();
+        let is_parquet = lower.ends_with(".parquet") || lower.ends_with(".pq");
+        let is_csv = lower.ends_with(".csv") || lower.ends_with(".tsv");
 
-        let conn = if path.is_empty() || path == ":memory:" || is_parquet {
+        let conn = if path.is_empty() || path == ":memory:" || is_parquet || is_csv {
             Connection::open_in_memory()?
         } else {
             Connection::open(path)?
@@ -53,6 +55,15 @@ impl DatabaseDriver for DuckDbDriver {
             let escaped = path.replace('\'', "''");
             let view_sql = format!(
                 "CREATE OR REPLACE VIEW parquet_data AS SELECT * FROM read_parquet('{}');",
+                escaped
+            );
+            conn.execute_batch(&view_sql)?;
+            self.is_parquet_mode = true;
+        } else if is_csv {
+            // Register the CSV/TSV file as a view named `csv_data`
+            let escaped = path.replace('\'', "''");
+            let view_sql = format!(
+                "CREATE OR REPLACE VIEW csv_data AS SELECT * FROM read_csv_auto('{}');",
                 escaped
             );
             conn.execute_batch(&view_sql)?;
@@ -143,23 +154,41 @@ impl DatabaseDriver for DuckDbDriver {
         let conn = conn_arc.lock().map_err(|e| e.to_string())?;
 
         let trimmed = sql.trim();
-        let upper = trimmed.to_uppercase();
+        let statements: Vec<&str> = trimmed
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        if statements.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if statements.len() > 1 {
+            let prefix_sql = format!("{};", statements[..statements.len() - 1].join(";\n"));
+            conn.execute_batch(&prefix_sql)?;
+        }
+
+        let final_stmt = statements[statements.len() - 1];
+        let upper = final_stmt.to_uppercase();
 
         let is_select = upper.starts_with("SELECT")
             || upper.starts_with("DESCRIBE")
             || upper.starts_with("SHOW")
             || upper.starts_with("EXPLAIN")
             || upper.starts_with("WITH")
-            || upper.starts_with("PRAGMA");
+            || upper.starts_with("PRAGMA")
+            || upper.starts_with("SUMMARIZE")
+            || upper.starts_with("VALUES");
 
         if is_select {
-            let mut stmt = conn.prepare(trimmed)?;
+            let mut stmt = conn.prepare(final_stmt)?;
             let arrow_stream = stmt.query_arrow([])?;
             let batches: Vec<RecordBatch> = arrow_stream.collect();
             Ok(batches)
         } else {
             // Execute DDL/DML statement
-            let affected = conn.execute(trimmed, [])?;
+            let affected = conn.execute(final_stmt, [])?;
 
             let mut status_builder = StringBuilder::with_capacity(1, 16);
             status_builder.append_value("SUCCESS");

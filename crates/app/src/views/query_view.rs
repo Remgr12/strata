@@ -1,6 +1,8 @@
 use crate::state::AppState;
+use crate::theme::ThemePalette;
 use gpui::prelude::*;
 use gpui::*;
+use std::time::Duration;
 
 pub struct QueryView {
     pub state: Entity<AppState>,
@@ -14,6 +16,128 @@ impl QueryView {
             focus_handle: cx.focus_handle(),
         }
     }
+
+    fn is_sql_keyword(word: &str) -> bool {
+        let upper = word
+            .trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .to_ascii_uppercase();
+        matches!(
+            upper.as_str(),
+            "SELECT"
+                | "FROM"
+                | "WHERE"
+                | "GROUP"
+                | "BY"
+                | "ORDER"
+                | "ASC"
+                | "DESC"
+                | "LIMIT"
+                | "OFFSET"
+                | "HAVING"
+                | "JOIN"
+                | "LEFT"
+                | "INNER"
+                | "RIGHT"
+                | "OUTER"
+                | "ON"
+                | "AS"
+                | "AND"
+                | "OR"
+                | "NOT"
+                | "IN"
+                | "IS"
+                | "NULL"
+                | "COUNT"
+                | "SUM"
+                | "AVG"
+                | "MIN"
+                | "MAX"
+                | "DISTINCT"
+                | "INSERT"
+                | "INTO"
+                | "VALUES"
+                | "UPDATE"
+                | "SET"
+                | "DELETE"
+                | "CREATE"
+                | "TABLE"
+                | "ALTER"
+                | "DROP"
+                | "VIEW"
+                | "INDEX"
+                | "PRIMARY"
+                | "KEY"
+                | "FOREIGN"
+                | "REFERENCES"
+                | "PRAGMA"
+                | "DESCRIBE"
+                | "SHOW"
+                | "SUMMARIZE"
+                | "WITH"
+                | "CASE"
+                | "WHEN"
+                | "THEN"
+                | "ELSE"
+                | "END"
+                | "UNION"
+                | "ALL"
+        )
+    }
+
+    fn render_highlighted_line(line: &str, theme: &ThemePalette) -> Div {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("--") {
+            return div()
+                .flex_1()
+                .text_xs()
+                .font_family("monospace")
+                .text_color(theme.text_muted_rgb())
+                .child(line.to_string());
+        }
+
+        // Tokenize preserving spaces so syntax colors align naturally in a flex row
+        let mut spans = Vec::new();
+        for token in line.split_inclusive(' ') {
+            let trimmed_tok = token.trim();
+            let is_str = trimmed_tok.starts_with('\'') || trimmed_tok.ends_with('\'');
+            let is_num = !trimmed_tok.is_empty()
+                && trimmed_tok
+                    .trim_end_matches(|c: char| c == ';' || c == ',' || c == ')')
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || c == '.');
+            let is_kw = Self::is_sql_keyword(trimmed_tok);
+
+            let (color, bold) = if is_str {
+                (theme.accent_rgb(), false)
+            } else if is_kw {
+                (theme.telemetry_rgb(), true)
+            } else if is_num {
+                (theme.telemetry_rgb(), false)
+            } else {
+                (theme.text_primary_rgb(), false)
+            };
+
+            spans.push(
+                div()
+                    .text_xs()
+                    .font_family("monospace")
+                    .text_color(color)
+                    .when(bold, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(token.to_string()),
+            );
+        }
+
+        if spans.is_empty() {
+            div()
+                .flex_1()
+                .text_xs()
+                .font_family("monospace")
+                .text_color(theme.text_primary_rgb())
+                .child(String::new())
+        } else {
+            div().flex_1().flex().flex_wrap().children(spans)
+        }
+    }
 }
 
 impl Render for QueryView {
@@ -21,30 +145,39 @@ impl Render for QueryView {
         let app_state = self.state.read(cx);
         let theme = app_state.theme.clone();
         let query_buffer = app_state.query_buffer.clone();
+        let query_cursor = app_state.query_cursor;
+        let has_history = !app_state.query_history.is_empty();
         let is_executing = app_state.is_executing;
         let exec_time = app_state.execution_time_ms;
         let error_message = app_state.error_message.clone();
-        let selected_table = app_state
-            .selected_table
-            .clone()
-            .unwrap_or_else(|| "customers".to_string());
+        let default_row_limit = app_state.default_row_limit;
+        let selected_table = app_state.selected_table.clone();
         let is_focused = self.focus_handle.is_focused(window);
 
-        let lines: Vec<String> = if query_buffer.is_empty() {
+        // Insert visible cursor marker `▏` at `query_cursor` when focused
+        let display_buffer = if is_focused {
+            let char_count = query_buffer.chars().count();
+            let pos = query_cursor.min(char_count);
+            let byte_idx = query_buffer
+                .char_indices()
+                .nth(pos)
+                .map(|(i, _)| i)
+                .unwrap_or(query_buffer.len());
+            let mut buf = query_buffer.clone();
+            buf.insert(byte_idx, '▏');
+            buf
+        } else {
+            query_buffer.clone()
+        };
+
+        let lines: Vec<String> = if display_buffer.is_empty() {
             vec![String::new()]
         } else {
-            query_buffer.lines().map(|s| s.to_string()).collect()
+            display_buffer.split('\n').map(|s| s.to_string()).collect()
         };
 
         let mut line_rows = Vec::new();
         for (idx, line_text) in lines.iter().enumerate() {
-            let is_last = idx + 1 == lines.len();
-            let display_line = if is_last && is_focused {
-                format!("{}▏", line_text)
-            } else {
-                line_text.clone()
-            };
-
             line_rows.push(
                 div()
                     .flex()
@@ -60,14 +193,7 @@ impl Render for QueryView {
                             .text_color(theme.text_muted_rgb())
                             .child(format!("{}", idx + 1)),
                     )
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_xs()
-                            .font_family("monospace")
-                            .text_color(theme.text_primary_rgb())
-                            .child(display_line),
-                    ),
+                    .child(Self::render_highlighted_line(&line_text, &theme)),
             );
         }
 
@@ -131,56 +257,83 @@ impl Render for QueryView {
                                         }
                                     })),
                             )
-                            .child(
-                                div()
-                                    .id("chip-select-top")
-                                    .px_2p5()
-                                    .py_1()
-                                    .rounded(px(6.0))
-                                    .bg(chip_bg)
-                                    .hover(move |s| s.bg(chip_hover))
-                                    .cursor_pointer()
-                                    .text_xs()
-                                    .text_color(chip_fg)
-                                    .child("Limit 100")
-                                    .on_click(cx.listener({
-                                        let state_model = self.state.clone();
-                                        move |_this, _event, _window, cx| {
-                                            let sql = format!(
-                                                "SELECT * FROM \"{}\" LIMIT 100;",
-                                                table_for_select
-                                            );
-                                            state_model.update(cx, |state, cx| {
-                                                state.set_query_and_run(sql, cx);
-                                            });
-                                        }
-                                    })),
-                            )
-                            .child(
-                                div()
-                                    .id("chip-count-rows")
-                                    .px_2p5()
-                                    .py_1()
-                                    .rounded(px(6.0))
-                                    .bg(chip_bg)
-                                    .hover(move |s| s.bg(chip_hover))
-                                    .cursor_pointer()
-                                    .text_xs()
-                                    .text_color(chip_fg)
-                                    .child("Count")
-                                    .on_click(cx.listener({
-                                        let state_model = self.state.clone();
-                                        move |_this, _event, _window, cx| {
-                                            let sql = format!(
-                                                "SELECT COUNT(*) AS total_rows FROM \"{}\";",
-                                                table_for_count
-                                            );
-                                            state_model.update(cx, |state, cx| {
-                                                state.set_query_and_run(sql, cx);
-                                            });
-                                        }
-                                    })),
-                            ),
+                            .when_some(table_for_select, |el, tbl| {
+                                el.child(
+                                    div()
+                                        .id("chip-select-top")
+                                        .px_2p5()
+                                        .py_1()
+                                        .rounded(px(6.0))
+                                        .bg(chip_bg)
+                                        .hover(move |s| s.bg(chip_hover))
+                                        .cursor_pointer()
+                                        .text_xs()
+                                        .text_color(chip_fg)
+                                        .child(format!("Limit {}", default_row_limit))
+                                        .on_click(cx.listener({
+                                            let state_model = self.state.clone();
+                                            move |_this, _event, _window, cx| {
+                                                let sql = format!(
+                                                    "SELECT * FROM \"{}\" LIMIT {};",
+                                                    tbl, default_row_limit
+                                                );
+                                                state_model.update(cx, |state, cx| {
+                                                    state.set_query_and_run(sql, cx);
+                                                });
+                                            }
+                                        })),
+                                )
+                            })
+                            .when_some(table_for_count, |el, tbl| {
+                                el.child(
+                                    div()
+                                        .id("chip-count-rows")
+                                        .px_2p5()
+                                        .py_1()
+                                        .rounded(px(6.0))
+                                        .bg(chip_bg)
+                                        .hover(move |s| s.bg(chip_hover))
+                                        .cursor_pointer()
+                                        .text_xs()
+                                        .text_color(chip_fg)
+                                        .child("Count")
+                                        .on_click(cx.listener({
+                                            let state_model = self.state.clone();
+                                            move |_this, _event, _window, cx| {
+                                                let sql = format!(
+                                                    "SELECT COUNT(*) AS total_rows FROM \"{}\";",
+                                                    tbl
+                                                );
+                                                state_model.update(cx, |state, cx| {
+                                                    state.set_query_and_run(sql, cx);
+                                                });
+                                            }
+                                        })),
+                                )
+                            })
+                            .when(has_history, |el| {
+                                el.child(
+                                    div()
+                                        .id("chip-query-history")
+                                        .px_2p5()
+                                        .py_1()
+                                        .rounded(px(6.0))
+                                        .bg(chip_bg)
+                                        .hover(move |s| s.bg(chip_hover))
+                                        .cursor_pointer()
+                                        .text_xs()
+                                        .text_color(chip_fg)
+                                        .child("History")
+                                        .on_click(cx.listener({
+                                            let state_model = self.state.clone();
+                                            move |_this, _event, _window, cx| {
+                                                state_model.update(cx, |state, cx| {
+                                                    state.cycle_query_history(cx);
+                                                });
+                                            }
+                                        })),
+                                )
+                            }),
                     )
                     .child(
                         div()
@@ -202,6 +355,27 @@ impl Render for QueryView {
                             })
                             .child(
                                 div()
+                                    .id("btn-format-sql")
+                                    .px_2p5()
+                                    .py_1()
+                                    .rounded(px(6.0))
+                                    .bg(chip_bg)
+                                    .hover(move |s| s.bg(chip_hover))
+                                    .cursor_pointer()
+                                    .text_xs()
+                                    .text_color(chip_fg)
+                                    .child("Format")
+                                    .on_click(cx.listener({
+                                        let state_model = self.state.clone();
+                                        move |_this, _event, _window, cx| {
+                                            state_model.update(cx, |state, cx| {
+                                                state.format_query_buffer(cx);
+                                            });
+                                        }
+                                    })),
+                            )
+                            .child(
+                                div()
                                     .id("btn-paste-sql")
                                     .px_2p5()
                                     .py_1()
@@ -218,7 +392,7 @@ impl Render for QueryView {
                                             if let Some(item) = cx.read_from_clipboard() {
                                                 if let Some(txt) = item.text() {
                                                     state_model.update(cx, |state, cx| {
-                                                        state.query_buffer = txt;
+                                                        state.set_query_buffer_with_cursor(txt);
                                                         cx.notify();
                                                     });
                                                 }
@@ -321,10 +495,49 @@ impl Render for QueryView {
                                 return;
                             }
 
+                            if (mods.control || mods.platform) && key.eq_ignore_ascii_case("l") {
+                                state_model.update(cx, |state, cx| {
+                                    state.clear_query(cx);
+                                });
+                                return;
+                            }
+
+                            if mods.alt && key == "up" {
+                                state_model.update(cx, |state, cx| {
+                                    state.cycle_query_history(cx);
+                                });
+                                return;
+                            }
+
                             match key {
+                                "left" => {
+                                    state_model.update(cx, |state, cx| {
+                                        state.move_cursor_left(cx);
+                                    });
+                                }
+                                "right" => {
+                                    state_model.update(cx, |state, cx| {
+                                        state.move_cursor_right(cx);
+                                    });
+                                }
+                                "home" => {
+                                    state_model.update(cx, |state, cx| {
+                                        state.move_cursor_home(cx);
+                                    });
+                                }
+                                "end" => {
+                                    state_model.update(cx, |state, cx| {
+                                        state.move_cursor_end(cx);
+                                    });
+                                }
                                 "backspace" => {
                                     state_model.update(cx, |state, cx| {
                                         state.backspace_query(cx);
+                                    });
+                                }
+                                "delete" => {
+                                    state_model.update(cx, |state, cx| {
+                                        state.delete_at_cursor(cx);
                                     });
                                 }
                                 "enter" => {
@@ -388,5 +601,10 @@ impl Render for QueryView {
                         ),
                 )
             })
+            .with_animation(
+                "query-editor-fade",
+                Animation::new(Duration::from_millis(180)).with_easing(ease_out_quint()),
+                |el, delta| el.opacity(delta),
+            )
     }
 }
