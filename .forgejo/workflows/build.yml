@@ -56,16 +56,16 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-linux-${{ hashFiles('**/Cargo.lock') }}
+          key: v2-${{ runner.os }}-cargo-linux-${{ hashFiles('**/Cargo.lock', 'scripts/patch-gpui.sh') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-linux-
+            v2-${{ runner.os }}-cargo-linux-
 
       - name: Build release binary
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo fetch
           bash scripts/patch-gpui.sh
-          cargo build --release -p strata-app
+          cargo build --release -p strata-app --message-format=json-diagnostic-rendered-ansi > /tmp/cargo-build.jsonl
 
       - name: Package Linux binary & Flatpak bundle
         run: |
@@ -92,45 +92,56 @@ jobs:
             target/*/release/strata-app* \
             .flatpak-builder build-dir repo
           python3 - <<'PY'
-          import glob, os, re, shutil
+          import glob, json, os, re, shutil
 
-          for pattern in [
-              "target/release/deps",
-              "target/*/release/deps",
-              "target/release/build",
-              "target/*/release/build",
-              "target/release/.fingerprint",
-              "target/*/release/.fingerprint",
-          ]:
-              for d in glob.glob(pattern):
-                  if not os.path.isdir(d):
-                      continue
-                  groups = {}
-                  for entry in os.listdir(d):
-                      m = re.match(r"^(.+)-([0-9a-f]{16})(\..+)?$", entry)
-                      if not m:
-                          continue
-                      prefix, h = m.group(1), m.group(2)
-                      path = os.path.join(d, entry)
+          # Remove intermediate C/C++ object files from libduckdb-sys while keeping libduckdb*.a and bindgen.rs
+          for obj in glob.glob("target/**/build/libduckdb-sys-*/out/*.o", recursive=True):
+              try:
+                  os.remove(obj)
+              except OSError:
+                  pass
+
+          # Extract exact active unit hashes from Cargo's JSON build log
+          active_hashes = set()
+          hash_re = re.compile(r"-([0-9a-f]{16})(?:[./\\]|$)")
+          if os.path.exists("/tmp/cargo-build.jsonl"):
+              with open("/tmp/cargo-build.jsonl", errors="replace") as f:
+                  for line in f:
                       try:
-                          mtime = os.path.getmtime(path)
-                      except OSError:
+                          msg = json.loads(line)
+                      except Exception:
                           continue
-                      groups.setdefault(prefix, {}).setdefault(h, []).append((mtime, path))
-                  for prefix, hashes in groups.items():
-                      if len(hashes) <= 1:
+                      for fn in msg.get("filenames") or []:
+                          for m in hash_re.finditer(fn):
+                              active_hashes.add(m.group(1))
+                      out_dir = msg.get("out_dir")
+                      if out_dir:
+                          for m in hash_re.finditer(out_dir):
+                              active_hashes.add(m.group(1))
+
+          if active_hashes:
+              for pattern in [
+                  "target/release/deps",
+                  "target/*/release/deps",
+                  "target/release/build",
+                  "target/*/release/build",
+                  "target/release/.fingerprint",
+                  "target/*/release/.fingerprint",
+              ]:
+                  for d in glob.glob(pattern):
+                      if not os.path.isdir(d):
                           continue
-                      ranked = sorted(
-                          hashes.items(),
-                          key=lambda kv: max(mt for mt, _ in kv[1]),
-                          reverse=True,
-                      )
-                      for _, items in ranked[1:]:
-                          for _, path in items:
+                      for entry in os.listdir(d):
+                          m = re.match(r"^(.+)-([0-9a-f]{16})(\..+)?$", entry)
+                          if m and m.group(2) not in active_hashes:
+                              path = os.path.join(d, entry)
                               if os.path.isdir(path):
                                   shutil.rmtree(path, ignore_errors=True)
                               elif os.path.exists(path):
-                                  os.remove(path)
+                                  try:
+                                      os.remove(path)
+                                  except OSError:
+                                      pass
 
           cache_blobs = sorted(
               [p for p in glob.glob("/runner-cache/actcache/cache/*/*") if os.path.isfile(p)],
@@ -182,9 +193,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-windows-${{ hashFiles('**/Cargo.lock') }}
+          key: v2-${{ runner.os }}-cargo-windows-${{ hashFiles('**/Cargo.lock', 'scripts/patch-gpui.sh') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-windows-
+            v2-${{ runner.os }}-cargo-windows-
 
       - name: Patch GPUI for Windows cross-compilation
         run: |
@@ -201,7 +212,7 @@ jobs:
           CXXFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          cargo build --release -p strata-app --target x86_64-pc-windows-gnu
+          cargo build --release -p strata-app --target x86_64-pc-windows-gnu --message-format=json-diagnostic-rendered-ansi > /tmp/cargo-build.jsonl
 
       - name: Build Windows installer (.msi) and standalone executable (.exe)
         run: |
@@ -236,45 +247,56 @@ jobs:
             target/release/strata-app* \
             target/*/release/strata-app*
           python3 - <<'PY'
-          import glob, os, re, shutil
+          import glob, json, os, re, shutil
 
-          for pattern in [
-              "target/release/deps",
-              "target/*/release/deps",
-              "target/release/build",
-              "target/*/release/build",
-              "target/release/.fingerprint",
-              "target/*/release/.fingerprint",
-          ]:
-              for d in glob.glob(pattern):
-                  if not os.path.isdir(d):
-                      continue
-                  groups = {}
-                  for entry in os.listdir(d):
-                      m = re.match(r"^(.+)-([0-9a-f]{16})(\..+)?$", entry)
-                      if not m:
-                          continue
-                      prefix, h = m.group(1), m.group(2)
-                      path = os.path.join(d, entry)
+          # Remove intermediate C/C++ object files from libduckdb-sys while keeping libduckdb*.a and bindgen.rs
+          for obj in glob.glob("target/**/build/libduckdb-sys-*/out/*.o", recursive=True):
+              try:
+                  os.remove(obj)
+              except OSError:
+                  pass
+
+          # Extract exact active unit hashes from Cargo's JSON build log
+          active_hashes = set()
+          hash_re = re.compile(r"-([0-9a-f]{16})(?:[./\\]|$)")
+          if os.path.exists("/tmp/cargo-build.jsonl"):
+              with open("/tmp/cargo-build.jsonl", errors="replace") as f:
+                  for line in f:
                       try:
-                          mtime = os.path.getmtime(path)
-                      except OSError:
+                          msg = json.loads(line)
+                      except Exception:
                           continue
-                      groups.setdefault(prefix, {}).setdefault(h, []).append((mtime, path))
-                  for prefix, hashes in groups.items():
-                      if len(hashes) <= 1:
+                      for fn in msg.get("filenames") or []:
+                          for m in hash_re.finditer(fn):
+                              active_hashes.add(m.group(1))
+                      out_dir = msg.get("out_dir")
+                      if out_dir:
+                          for m in hash_re.finditer(out_dir):
+                              active_hashes.add(m.group(1))
+
+          if active_hashes:
+              for pattern in [
+                  "target/release/deps",
+                  "target/*/release/deps",
+                  "target/release/build",
+                  "target/*/release/build",
+                  "target/release/.fingerprint",
+                  "target/*/release/.fingerprint",
+              ]:
+                  for d in glob.glob(pattern):
+                      if not os.path.isdir(d):
                           continue
-                      ranked = sorted(
-                          hashes.items(),
-                          key=lambda kv: max(mt for mt, _ in kv[1]),
-                          reverse=True,
-                      )
-                      for _, items in ranked[1:]:
-                          for _, path in items:
+                      for entry in os.listdir(d):
+                          m = re.match(r"^(.+)-([0-9a-f]{16})(\..+)?$", entry)
+                          if m and m.group(2) not in active_hashes:
+                              path = os.path.join(d, entry)
                               if os.path.isdir(path):
                                   shutil.rmtree(path, ignore_errors=True)
                               elif os.path.exists(path):
-                                  os.remove(path)
+                                  try:
+                                      os.remove(path)
+                                  except OSError:
+                                      pass
 
           cache_blobs = sorted(
               [p for p in glob.glob("/runner-cache/actcache/cache/*/*") if os.path.isfile(p)],

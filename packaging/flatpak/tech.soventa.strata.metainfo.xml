@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.0.8" date="2026-11-01">
+      <description>
+        <p>Fix CI Cargo build cache pruning and GPUI patch timestamp preservation.</p>
+      </description>
+    </release>
     <release version="0.0.7" date="2026-11-01">
       <description>
         <p>Top-left File/View/Settings menu bar, GPUI animations, interactive column sorting, Row Detail Inspector, CSV/JSON export, SQL syntax highlighting and formatter, schema search filter, and multi-statement SQL execution.</p>

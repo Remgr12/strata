@@ -11,9 +11,11 @@ fi
 
 for RENDERER in $RENDERERS; do
     python3 - "$RENDERER" << 'PYEOF'
+import os
 import sys
 
 renderer = sys.argv[1]
+orig_stat = os.stat(renderer)
 with open(renderer, 'r') as f:
     content = f.read()
 
@@ -163,6 +165,7 @@ content = content[:start_idx] + replacement + content[end_idx:]
 
 with open(renderer, 'w') as f:
     f.write(content)
+os.utime(renderer, (orig_stat.st_atime, orig_stat.st_mtime))
 
 print(f"Patched: {renderer}")
 PYEOF
@@ -171,9 +174,11 @@ done
 WIN_WINDOWS=$(find "$CARGO_DIR/registry/src" -path "*/gpui-*/src/platform/windows/window.rs" 2>/dev/null)
 for WIN_FILE in $WIN_WINDOWS; do
     python3 - "$WIN_FILE" << 'PYEOF'
+import os
 import sys
 
 path = sys.argv[1]
+orig_stat = os.stat(path)
 with open(path, 'r') as f:
     content = f.read()
 
@@ -218,6 +223,7 @@ if old_zoom in content:
     content = content.replace(old_zoom, new_zoom, 1)
     with open(path, 'w') as f:
         f.write(content)
+    os.utime(path, (orig_stat.st_atime, orig_stat.st_mtime))
     print(f"Patched zoom/start_window_move in: {path}")
 else:
     print(f"zoom/start_window_move already patched or not matched in: {path}")
@@ -227,9 +233,11 @@ done
 GPUI_WINDOWS=$(find "$CARGO_DIR/registry/src" -path "*/gpui-*/src/window.rs" 2>/dev/null)
 for WIN_RS in $GPUI_WINDOWS; do
     python3 - "$WIN_RS" << 'PYEOF'
+import os
 import sys
 
 path = sys.argv[1]
+orig_stat = os.stat(path)
 with open(path, 'r') as f:
     content = f.read()
 
@@ -240,6 +248,7 @@ if old_loop in content:
     content = content.replace(old_loop, new_loop, 1)
     with open(path, 'w') as f:
         f.write(content)
+    os.utime(path, (orig_stat.st_atime, orig_stat.st_mtime))
     print(f"Patched window_control_hitboxes order in: {path}")
 else:
     print(f"window_control_hitboxes already patched in: {path}")
