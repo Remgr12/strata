@@ -135,7 +135,11 @@ jobs:
         run: |
           mkdir -p dist
           cp target/x86_64-pc-windows-gnu/release/strata-app.exe dist/strata.exe
-          wixl -o dist/strata.msi packaging/windows/strata.wxs
+          cp $(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libstdc++-6.dll" | grep posix | head -n 1) dist/
+          cp $(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libgcc_s_seh-1.dll" | grep posix | head -n 1) dist/
+          cp $(find /usr/x86_64-w64-mingw32 -name "libwinpthread-1.dll" | head -n 1) dist/
+          x86_64-w64-mingw32-strip dist/strata.exe dist/libstdc++-6.dll dist/libgcc_s_seh-1.dll dist/libwinpthread-1.dll
+          wixl -a x64 --ext ui -I packaging/windows -o dist/strata.msi packaging/windows/strata.wxs
 
       - name: Upload Windows artifacts (.exe & .msi)
         uses: actions/upload-artifact@v3

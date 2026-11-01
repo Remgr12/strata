@@ -3,7 +3,7 @@
   <Product Id="*"
            Name="Strata"
            Language="1033"
-           Version="0.0.1"
+           Version="0.0.2"
            Manufacturer="Zsombor Simon"
            UpgradeCode="B5A3C4E5-6D7F-4A9B-8C1D-2E3F4A5B6C7D">
 
@@ -14,26 +14,66 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of Strata is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
+    <UIRef Id="WixUI_Minimal" />
+
     <Feature Id="ProductFeature" Title="Strata" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="ApplicationShortcut" />
     </Feature>
   </Product>
 
   <Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFilesFolder">
+      <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLFOLDER" Name="Strata" />
       </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Strata" />
+      </Directory>
+      <Directory Id="DesktopFolder" Name="Desktop" />
     </Directory>
   </Fragment>
 
   <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <Component Id="MainExecutable" Guid="A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D">
+      <Component Id="MainExecutable" Guid="A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D" Win64="yes">
         <File Id="StrataExe"
               Source="dist/strata.exe"
               KeyPath="yes" />
       </Component>
+      <Component Id="LibStdCpp" Guid="C1D2E3F4-A5B6-4C7D-8E9F-0A1B2C3D4E5F" Win64="yes">
+        <File Id="LibStdCppDll"
+              Source="dist/libstdc++-6.dll"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="LibGcc" Guid="D2E3F4A5-B6C7-4D8E-9F0A-1B2C3D4E5F6A" Win64="yes">
+        <File Id="LibGccDll"
+              Source="dist/libgcc_s_seh-1.dll"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="LibWinPthread" Guid="E3F4A5B6-C7D8-4E9F-0A1B-2C3D4E5F6A7B" Win64="yes">
+        <File Id="LibWinPthreadDll"
+              Source="dist/libwinpthread-1.dll"
+              KeyPath="yes" />
+      </Component>
     </ComponentGroup>
+
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcut" Guid="B2C3D4E5-F6A7-4B8C-9D0E-1F2A3B4C5D6E" Win64="yes">
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="Strata"
+                  Description="Native GPU-accelerated desktop database client"
+                  Target="[INSTALLFOLDER]strata.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="ApplicationDesktopShortcut"
+                  Directory="DesktopFolder"
+                  Name="Strata"
+                  Description="Native GPU-accelerated desktop database client"
+                  Target="[INSTALLFOLDER]strata.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Strata" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
   </Fragment>
 </Wix>
