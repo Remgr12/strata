@@ -108,10 +108,8 @@ impl TableView {
 impl Render for TableView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let app_state = self.state.read(cx);
-        let status_msg = app_state
-            .status_message
-            .clone()
-            .unwrap_or_else(|| "Ready".to_string());
+        let theme = app_state.theme.clone();
+        let status_msg = app_state.status_message.clone();
         let selected_row = app_state.selected_row;
 
         let batches = match &app_state.query_results {
@@ -122,7 +120,7 @@ impl Render for TableView {
                     .flex()
                     .flex_col()
                     .justify_between()
-                    .bg(rgb(0x090a0f))
+                    .bg(theme.substrate_rgb())
                     .child(
                         div()
                             .flex_1()
@@ -132,41 +130,54 @@ impl Render for TableView {
                             .child(
                                 div()
                                     .flex()
-                                    .flex_col()
                                     .items_center()
                                     .gap_3()
-                                    .p_6()
-                                    .rounded(px(8.0))
-                                    .bg(rgb(0x0f1117))
+                                    .p_4()
+                                    .rounded(px(12.0))
+                                    .bg(theme.surface_rgb())
                                     .border_1()
-                                    .border_color(rgb(0x1e2230))
+                                    .border_color(theme.outline_rgb())
                                     .child(
                                         div()
-                                            .text_sm()
-                                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(rgb(0xeceff4))
-                                            .child("No active result set"),
-                                    )
-                                    .child(
-                                        div()
+                                            .id("empty-grid-open-btn")
+                                            .px_4()
+                                            .py_2()
+                                            .rounded(px(8.0))
+                                            .bg(theme.accent_rgb())
+                                            .hover({
+                                                let h = theme.accent_hover_rgb();
+                                                move |s| s.bg(h)
+                                            })
+                                            .cursor_pointer()
                                             .text_xs()
-                                            .text_color(rgb(0x5c637a))
-                                            .child("Open a database file, load the sample workspace, or run a SQL query above."),
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .text_color(theme.on_accent_rgb())
+                                            .child("Open File")
+                                            .on_click(cx.listener({
+                                                let state_model = self.state.clone();
+                                                move |_this, _event, _window, cx| {
+                                                    state_model.update(cx, |state, cx| {
+                                                        state.prompt_open_file(cx);
+                                                    });
+                                                }
+                                            })),
                                     )
                                     .child(
                                         div()
                                             .id("empty-grid-sample-btn")
-                                            .mt_1()
-                                            .px_3()
-                                            .py_1p5()
-                                            .rounded(px(5.0))
-                                            .bg(rgb(0x5e81f4))
-                                            .hover(|s| s.bg(rgb(0x7393f7)))
+                                            .px_4()
+                                            .py_2()
+                                            .rounded(px(8.0))
+                                            .bg(theme.primary_rgb())
+                                            .hover({
+                                                let h = theme.primary_hover_rgb();
+                                                move |s| s.bg(h)
+                                            })
                                             .cursor_pointer()
                                             .text_xs()
                                             .font_weight(gpui::FontWeight::MEDIUM)
-                                            .text_color(rgb(0xffffff))
-                                            .child("Load Sample Workspace")
+                                            .text_color(theme.on_primary_rgb())
+                                            .child("Sample Workspace")
                                             .on_click(cx.listener({
                                                 let state_model = self.state.clone();
                                                 move |_this, _event, _window, cx| {
@@ -177,18 +188,6 @@ impl Render for TableView {
                                             })),
                                     ),
                             ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .px_3()
-                            .py_1p5()
-                            .bg(rgb(0x0f1117))
-                            .border_t_1()
-                            .border_color(rgb(0x1e2230))
-                            .child(div().text_xs().text_color(rgb(0x5c637a)).child(status_msg)),
                     );
             }
         };
@@ -198,18 +197,17 @@ impl Render for TableView {
         let fields = schema.fields().to_vec();
         let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
 
-        // Column header cells
         let mut header_cells = Vec::new();
         header_cells.push(
             div()
                 .w(px(52.0))
                 .px_2p5()
-                .py_1p5()
+                .py_2()
                 .border_r_1()
-                .border_color(rgb(0x1e2230))
+                .border_color(theme.outline_variant_rgb())
                 .text_xs()
                 .font_family("monospace")
-                .text_color(rgb(0x5c637a))
+                .text_color(theme.text_muted_rgb())
                 .child("#"),
         );
 
@@ -221,9 +219,9 @@ impl Render for TableView {
                     .flex_1()
                     .min_w(px(130.0))
                     .px_3()
-                    .py_1p5()
+                    .py_2()
                     .border_r_1()
-                    .border_color(rgb(0x1e2230))
+                    .border_color(theme.outline_variant_rgb())
                     .child(
                         div()
                             .flex()
@@ -233,14 +231,14 @@ impl Render for TableView {
                                 div()
                                     .text_xs()
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(rgb(0xeceff4))
+                                    .text_color(theme.text_primary_rgb())
                                     .child(field_name),
                             )
                             .child(
                                 div()
                                     .font_family("monospace")
                                     .text_xs()
-                                    .text_color(rgb(0x5c637a))
+                                    .text_color(theme.telemetry_rgb())
                                     .child(type_label),
                             ),
                     ),
@@ -249,21 +247,22 @@ impl Render for TableView {
 
         let batches_clone = batches.clone();
         let state_for_rows = self.state.clone();
+        let theme_for_rows = theme.clone();
 
         div()
             .flex_1()
             .flex()
             .flex_col()
-            .bg(rgb(0x090a0f))
+            .bg(theme.substrate_rgb())
             .overflow_hidden()
             .child(
-                // Sticky Header Row
+                // Sticky Material Table Header
                 div()
                     .flex()
                     .items_center()
-                    .bg(rgb(0x0f1117))
+                    .bg(theme.surface_container_rgb())
                     .border_b_1()
-                    .border_color(rgb(0x1e2230))
+                    .border_color(theme.outline_rgb())
                     .children(header_cells),
             )
             .child(
@@ -296,10 +295,10 @@ impl Render for TableView {
                                         .px_2p5()
                                         .py_1p5()
                                         .border_r_1()
-                                        .border_color(rgb(0x161924))
+                                        .border_color(theme_for_rows.outline_variant_rgb())
                                         .font_family("monospace")
                                         .text_xs()
-                                        .text_color(rgb(0x5c637a))
+                                        .text_color(theme_for_rows.text_muted_rgb())
                                         .child(format!("{}", global_ix + 1)),
                                 );
 
@@ -316,15 +315,15 @@ impl Render for TableView {
                                             .px_3()
                                             .py_1p5()
                                             .border_r_1()
-                                            .border_color(rgb(0x161924))
+                                            .border_color(theme_for_rows.outline_variant_rgb())
                                             .text_xs()
                                             .when(is_numeric, |el| el.font_family("monospace"))
                                             .text_color(if is_null {
-                                                rgb(0x43495c)
+                                                theme_for_rows.text_muted_rgb()
                                             } else if is_numeric {
-                                                rgb(0x8ab4f8)
+                                                theme_for_rows.telemetry_rgb()
                                             } else {
-                                                rgb(0xeceff4)
+                                                theme_for_rows.text_primary_rgb()
                                             })
                                             .child(val_str),
                                     );
@@ -334,6 +333,7 @@ impl Render for TableView {
                                 let is_even = global_ix % 2 == 0;
                                 let row_tsv = row_clipboard_parts.join("\t");
                                 let state_model = state_for_rows.clone();
+                                let hover_bg = theme_for_rows.surface_container_rgb();
 
                                 row_elements.push(
                                     div()
@@ -343,15 +343,15 @@ impl Render for TableView {
                                         .flex()
                                         .items_center()
                                         .border_b_1()
-                                        .border_color(rgb(0x12151e))
+                                        .border_color(theme_for_rows.outline_variant_rgb())
                                         .bg(if is_selected {
-                                            rgb(0x1c253d)
+                                            theme_for_rows.primary_container_rgb()
                                         } else if is_even {
-                                            rgb(0x090a0f)
+                                            theme_for_rows.substrate_rgb()
                                         } else {
-                                            rgb(0x0c0e14)
+                                            theme_for_rows.surface_lowest_rgb()
                                         })
-                                        .hover(|s| s.bg(rgb(0x161b28)))
+                                        .hover(move |s| s.bg(hover_bg))
                                         .cursor_pointer()
                                         .on_click(cx.listener(move |_this, _ev, _win, cx| {
                                             cx.write_to_clipboard(ClipboardItem::new_string(
@@ -359,10 +359,6 @@ impl Render for TableView {
                                             ));
                                             state_model.update(cx, |state, cx| {
                                                 state.selected_row = Some(global_ix);
-                                                state.status_message = Some(format!(
-                                                    "Row {} selected (copied to clipboard)",
-                                                    global_ix + 1
-                                                ));
                                                 cx.notify();
                                             });
                                         }))
@@ -377,27 +373,28 @@ impl Render for TableView {
                 .h_full(),
             )
             .child(
-                // Minimal Grid Footer Bar
+                // Telemetry Footer Bar
                 div()
                     .flex()
                     .items_center()
                     .justify_between()
-                    .px_3()
+                    .px_3p5()
                     .py_1p5()
-                    .bg(rgb(0x0f1117))
+                    .bg(theme.surface_rgb())
                     .border_t_1()
-                    .border_color(rgb(0x1e2230))
+                    .border_color(theme.outline_rgb())
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(0x949cbb))
-                            .child(status_msg),
+                            .text_color(theme.text_secondary_rgb())
+                            .child(status_msg.unwrap_or_default()),
                     )
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(0x5c637a))
-                            .child(format!("{} rows • {} columns", total_rows, fields.len())),
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(theme.telemetry_rgb())
+                            .child(format!("{} rows • {} cols", total_rows, fields.len())),
                     ),
             )
     }

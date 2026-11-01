@@ -63,6 +63,8 @@ jobs:
       - name: Build release binary
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch
+          bash scripts/patch-gpui.sh
           cargo build --release -p strata-app
 
       - name: Package Linux binary & Flatpak bundle

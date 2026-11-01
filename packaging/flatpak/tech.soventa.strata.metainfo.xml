@@ -27,8 +27,8 @@
   <url type="vcs-browser">https://git.soventa.tech/moha/strata</url>
 
   <Branding>
-    <color type="primary" scheme_preference="dark">#0f1117</color>
-    <color type="primary" scheme_preference="light">#5e81f4</color>
+    <color type="primary" scheme_preference="dark">#1A2229</color>
+    <color type="primary" scheme_preference="light">#D4DFE6</color>
   </Branding>
 
   <provides>
@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.0.6" date="2026-11-01">
+      <description>
+        <p>Material Design 3 UI redesign, custom theme studio with Hazy Aerostat Blue-Gray / Steel Indigo / Soft Dried Apricot / Faded Ice Cyan default palette, and Windows window modifier fixes.</p>
+      </description>
+    </release>
     <release version="0.0.5" date="2026-11-01">
       <description>
         <p>CI pipeline optimization with runner cache pruning and build maintenance.</p>

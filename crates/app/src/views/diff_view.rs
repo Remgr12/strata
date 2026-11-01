@@ -16,6 +16,7 @@ impl DiffView {
 impl Render for DiffView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let app_state = self.state.read(cx);
+        let theme = app_state.theme.clone();
         let has_snapshot = app_state.snapshot_schema.is_some();
         let snapshot_label = app_state
             .snapshot_label
@@ -31,7 +32,7 @@ impl Render for DiffView {
         let altered_count = diff.map(|d| d.altered_tables.len()).unwrap_or(0);
 
         let sql_lines: Vec<String> = if migration_sql.is_empty() {
-            vec!["-- No migration statements required".to_string()]
+            vec!["-- No migration statements".to_string()]
         } else {
             migration_sql.lines().map(|s| s.to_string()).collect()
         };
@@ -50,7 +51,7 @@ impl Render for DiffView {
                             .text_right()
                             .font_family("monospace")
                             .text_xs()
-                            .text_color(rgb(0x43495c))
+                            .text_color(theme.text_muted_rgb())
                             .child(format!("{}", idx + 1)),
                     )
                     .child(
@@ -59,9 +60,9 @@ impl Render for DiffView {
                             .font_family("monospace")
                             .text_xs()
                             .text_color(if line.starts_with("--") {
-                                rgb(0x5c637a)
+                                theme.text_muted_rgb()
                             } else {
-                                rgb(0xeceff4)
+                                theme.text_primary_rgb()
                             })
                             .child(line.clone()),
                     ),
@@ -72,59 +73,62 @@ impl Render for DiffView {
             .flex_1()
             .flex()
             .flex_col()
-            .bg(rgb(0x090a0f))
+            .bg(theme.substrate_rgb())
             .child(
-                // Diff Action Bar
+                // Material Diff Action Bar
                 div()
                     .flex()
                     .items_center()
                     .justify_between()
                     .px_4()
                     .py_2p5()
-                    .bg(rgb(0x0f1117))
+                    .bg(theme.surface_rgb())
                     .border_b_1()
-                    .border_color(rgb(0x1e2230))
+                    .border_color(theme.outline_rgb())
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap_2p5()
+                            .gap_2()
                             .child(
                                 div()
                                     .text_xs()
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(rgb(0xeceff4))
+                                    .text_color(theme.text_primary_rgb())
                                     .child(format!("Baseline: {}", snapshot_label)),
                             )
                             .child(
                                 div()
                                     .px_2()
                                     .py_0p5()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x112820))
+                                    .rounded(px(6.0))
+                                    .bg(theme.telemetry_container_rgb())
                                     .text_xs()
-                                    .text_color(rgb(0x3dd68c))
-                                    .child(format!("+{} added", added_count)),
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(theme.telemetry_rgb())
+                                    .child(format!("+{}", added_count)),
                             )
                             .child(
                                 div()
                                     .px_2()
                                     .py_0p5()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x281218))
+                                    .rounded(px(6.0))
+                                    .bg(theme.danger_container_rgb())
                                     .text_xs()
-                                    .text_color(rgb(0xf2777a))
-                                    .child(format!("-{} dropped", dropped_count)),
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(theme.danger_rgb())
+                                    .child(format!("-{}", dropped_count)),
                             )
                             .child(
                                 div()
                                     .px_2()
                                     .py_0p5()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x282012))
+                                    .rounded(px(6.0))
+                                    .bg(theme.accent_container_rgb())
                                     .text_xs()
-                                    .text_color(rgb(0xf5a623))
-                                    .child(format!("~{} modified", altered_count)),
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(theme.accent_rgb())
+                                    .child(format!("~{}", altered_count)),
                             ),
                     )
                     .child(
@@ -135,20 +139,19 @@ impl Render for DiffView {
                             .child(
                                 div()
                                     .id("btn-take-snapshot")
-                                    .px_2p5()
+                                    .px_3()
                                     .py_1()
-                                    .rounded(px(5.0))
-                                    .bg(rgb(0x5e81f4))
-                                    .hover(|s| s.bg(rgb(0x7393f7)))
+                                    .rounded(px(8.0))
+                                    .bg(theme.accent_rgb())
+                                    .hover({
+                                        let h = theme.accent_hover_rgb();
+                                        move |s| s.bg(h)
+                                    })
                                     .cursor_pointer()
                                     .text_xs()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                    .text_color(rgb(0xffffff))
-                                    .child(if has_snapshot {
-                                        "Update Snapshot"
-                                    } else {
-                                        "Capture Snapshot"
-                                    })
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme.on_accent_rgb())
+                                    .child("Snapshot")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -161,17 +164,19 @@ impl Render for DiffView {
                             .child(
                                 div()
                                     .id("btn-compare-file")
-                                    .px_2p5()
+                                    .px_3()
                                     .py_1()
-                                    .rounded(px(5.0))
-                                    .bg(rgb(0x181c26))
-                                    .border_1()
-                                    .border_color(rgb(0x252a3a))
-                                    .hover(|s| s.bg(rgb(0x212634)))
+                                    .rounded(px(8.0))
+                                    .bg(theme.surface_container_rgb())
+                                    .hover({
+                                        let h = theme.surface_container_high_rgb();
+                                        move |s| s.bg(h)
+                                    })
                                     .cursor_pointer()
                                     .text_xs()
-                                    .text_color(rgb(0xc8d0e0))
-                                    .child("Compare File...")
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(theme.text_primary_rgb())
+                                    .child("Compare")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -181,28 +186,27 @@ impl Render for DiffView {
                                         }
                                     })),
                             )
-                            // Dialect Segmented Toggle
                             .child(
                                 div()
                                     .flex()
                                     .items_center()
                                     .p_0p5()
-                                    .rounded(px(5.0))
-                                    .bg(rgb(0x141720))
-                                    .border_1()
-                                    .border_color(rgb(0x1e2230))
+                                    .rounded(px(8.0))
+                                    .bg(theme.surface_container_rgb())
                                     .child(
                                         div()
                                             .id("btn-dialect-sqlite")
-                                            .px_2()
+                                            .px_2p5()
                                             .py_0p5()
-                                            .rounded(px(4.0))
+                                            .rounded(px(6.0))
                                             .cursor_pointer()
                                             .when(dialect == SqlDialect::Sqlite, |el| {
-                                                el.bg(rgb(0x232838)).text_color(rgb(0xffffff))
+                                                el.bg(theme.primary_rgb())
+                                                    .text_color(theme.on_primary_rgb())
+                                                    .font_weight(gpui::FontWeight::MEDIUM)
                                             })
                                             .when(dialect != SqlDialect::Sqlite, |el| {
-                                                el.text_color(rgb(0x949cbb))
+                                                el.text_color(theme.text_secondary_rgb())
                                             })
                                             .text_xs()
                                             .child("SQLite")
@@ -221,15 +225,17 @@ impl Render for DiffView {
                                     .child(
                                         div()
                                             .id("btn-dialect-duckdb")
-                                            .px_2()
+                                            .px_2p5()
                                             .py_0p5()
-                                            .rounded(px(4.0))
+                                            .rounded(px(6.0))
                                             .cursor_pointer()
                                             .when(dialect == SqlDialect::DuckDb, |el| {
-                                                el.bg(rgb(0x232838)).text_color(rgb(0xffffff))
+                                                el.bg(theme.primary_rgb())
+                                                    .text_color(theme.on_primary_rgb())
+                                                    .font_weight(gpui::FontWeight::MEDIUM)
                                             })
                                             .when(dialect != SqlDialect::DuckDb, |el| {
-                                                el.text_color(rgb(0x949cbb))
+                                                el.text_color(theme.text_secondary_rgb())
                                             })
                                             .text_xs()
                                             .child("DuckDB")
@@ -249,7 +255,7 @@ impl Render for DiffView {
                     ),
             )
             .child(
-                // Split Pane: Structural Changes (Left) & Generated SQL (Right)
+                // Split Pane
                 div()
                     .flex_1()
                     .flex()
@@ -263,43 +269,29 @@ impl Render for DiffView {
                             .p_4()
                             .overflow_y_scroll()
                             .border_r_1()
-                            .border_color(rgb(0x1e2230))
+                            .border_color(theme.outline_rgb())
                             .child(if !has_snapshot {
                                 div()
                                     .p_6()
-                                    .rounded(px(8.0))
-                                    .bg(rgb(0x0f1117))
+                                    .rounded(px(10.0))
+                                    .bg(theme.surface_rgb())
                                     .border_1()
-                                    .border_color(rgb(0x1e2230))
-                                    .flex()
-                                    .flex_col()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(rgb(0xeceff4))
-                                            .child("No baseline snapshot selected"),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_center()
-                                            .text_color(rgb(0x5c637a))
-                                            .child("Click 'Capture Snapshot' to record the current schema, or 'Compare File...' to diff against another database."),
-                                    )
+                                    .border_color(theme.outline_rgb())
+                                    .text_center()
+                                    .text_xs()
+                                    .text_color(theme.text_muted_rgb())
+                                    .child("No baseline snapshot")
                             } else if diff.map(|d| d.is_empty()).unwrap_or(true) {
                                 div()
                                     .p_6()
-                                    .rounded(px(8.0))
-                                    .bg(rgb(0x0f1117))
+                                    .rounded(px(10.0))
+                                    .bg(theme.surface_rgb())
                                     .border_1()
-                                    .border_color(rgb(0x1e2230))
+                                    .border_color(theme.outline_rgb())
                                     .text_center()
                                     .text_xs()
-                                    .text_color(rgb(0x3dd68c))
-                                    .child("Schemas are identical — no structural differences detected.")
+                                    .text_color(theme.telemetry_rgb())
+                                    .child("Schemas match")
                             } else {
                                 let mut diff_cards = Vec::new();
                                 let d = diff.unwrap();
@@ -316,13 +308,13 @@ impl Render for DiffView {
                                                 .text_xs()
                                                 .child(
                                                     div()
-                                                        .text_color(rgb(0xc8d0e0))
+                                                        .text_color(theme.text_primary_rgb())
                                                         .child(format!("+ {}", col.name)),
                                                 )
                                                 .child(
                                                     div()
                                                         .font_family("monospace")
-                                                        .text_color(rgb(0x5c637a))
+                                                        .text_color(theme.telemetry_rgb())
                                                         .child(col.data_type.sql_repr()),
                                                 ),
                                         );
@@ -330,12 +322,12 @@ impl Render for DiffView {
 
                                     diff_cards.push(
                                         div()
-                                            .mb_2p5()
-                                            .p_3()
-                                            .rounded(px(6.0))
-                                            .bg(rgb(0x0f1916))
+                                            .mb_3()
+                                            .p_3p5()
+                                            .rounded(px(10.0))
+                                            .bg(theme.surface_rgb())
                                             .border_1()
-                                            .border_color(rgb(0x1c3b2f))
+                                            .border_color(theme.telemetry_rgb())
                                             .flex()
                                             .flex_col()
                                             .gap_1p5()
@@ -348,14 +340,14 @@ impl Render for DiffView {
                                                         div()
                                                             .text_xs()
                                                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                            .text_color(rgb(0x3dd68c))
-                                                            .child(format!("Added Table: {}", tbl.name)),
+                                                            .text_color(theme.telemetry_rgb())
+                                                            .child(format!("+ {}", tbl.name)),
                                                     )
                                                     .child(
                                                         div()
                                                             .text_xs()
-                                                            .text_color(rgb(0x5c637a))
-                                                            .child(format!("{} columns", tbl.columns.len())),
+                                                            .text_color(theme.text_muted_rgb())
+                                                            .child(format!("{} cols", tbl.columns.len())),
                                                     ),
                                             )
                                             .children(col_pills),
@@ -365,18 +357,18 @@ impl Render for DiffView {
                                 for tbl in &d.dropped_tables {
                                     diff_cards.push(
                                         div()
-                                            .mb_2p5()
-                                            .p_3()
-                                            .rounded(px(6.0))
-                                            .bg(rgb(0x1b1014))
+                                            .mb_3()
+                                            .p_3p5()
+                                            .rounded(px(10.0))
+                                            .bg(theme.surface_rgb())
                                             .border_1()
-                                            .border_color(rgb(0x3d1c24))
+                                            .border_color(theme.danger_rgb())
                                             .child(
                                                 div()
                                                     .text_xs()
                                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                    .text_color(rgb(0xf2777a))
-                                                    .child(format!("Dropped Table: {}", tbl.name)),
+                                                    .text_color(theme.danger_rgb())
+                                                    .child(format!("- {}", tbl.name)),
                                             ),
                                     );
                                 }
@@ -388,7 +380,7 @@ impl Render for DiffView {
                                         changes.push(
                                             div()
                                                 .text_xs()
-                                                .text_color(rgb(0x3dd68c))
+                                                .text_color(theme.telemetry_rgb())
                                                 .child(format!(
                                                     "+ {} ({})",
                                                     col.name,
@@ -401,7 +393,7 @@ impl Render for DiffView {
                                         changes.push(
                                             div()
                                                 .text_xs()
-                                                .text_color(rgb(0xf2777a))
+                                                .text_color(theme.danger_rgb())
                                                 .child(format!("- {}", col.name)),
                                         );
                                     }
@@ -410,7 +402,7 @@ impl Render for DiffView {
                                         changes.push(
                                             div()
                                                 .text_xs()
-                                                .text_color(rgb(0xf5a623))
+                                                .text_color(theme.accent_rgb())
                                                 .child(format!(
                                                     "~ {}: {} → {}",
                                                     cd.column_name,
@@ -422,12 +414,12 @@ impl Render for DiffView {
 
                                     diff_cards.push(
                                         div()
-                                            .mb_2p5()
-                                            .p_3()
-                                            .rounded(px(6.0))
-                                            .bg(rgb(0x19150f))
+                                            .mb_3()
+                                            .p_3p5()
+                                            .rounded(px(10.0))
+                                            .bg(theme.surface_rgb())
                                             .border_1()
-                                            .border_color(rgb(0x3b2e19))
+                                            .border_color(theme.accent_rgb())
                                             .flex()
                                             .flex_col()
                                             .gap_1()
@@ -435,11 +427,8 @@ impl Render for DiffView {
                                                 div()
                                                     .text_xs()
                                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                    .text_color(rgb(0xf5a623))
-                                                    .child(format!(
-                                                        "Modified Table: {}",
-                                                        alt.table_name
-                                                    )),
+                                                    .text_color(theme.accent_rgb())
+                                                    .child(format!("~ {}", alt.table_name)),
                                             )
                                             .children(changes),
                                     );
@@ -449,7 +438,7 @@ impl Render for DiffView {
                             }),
                     )
                     .child(
-                        // Right Column: Migration SQL Preview & Actions
+                        // Right Column: Migration DDL Preview
                         div()
                             .flex_1()
                             .h_full()
@@ -466,26 +455,29 @@ impl Render for DiffView {
                                         div()
                                             .text_xs()
                                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(rgb(0x949cbb))
-                                            .child("Migration SQL Script"),
+                                            .text_color(theme.text_secondary_rgb())
+                                            .child("DDL"),
                                     )
                                     .child(
                                         div()
                                             .flex()
                                             .items_center()
-                                            .gap_1p5()
+                                            .gap_2()
                                             .child(
                                                 div()
                                                     .id("btn-copy-migration")
-                                                    .px_2()
+                                                    .px_2p5()
                                                     .py_1()
-                                                    .rounded(px(4.0))
-                                                    .bg(rgb(0x141720))
-                                                    .hover(|s| s.bg(rgb(0x1c202c)))
+                                                    .rounded(px(6.0))
+                                                    .bg(theme.surface_container_rgb())
+                                                    .hover({
+                                                        let h = theme.surface_container_high_rgb();
+                                                        move |s| s.bg(h)
+                                                    })
                                                     .cursor_pointer()
                                                     .text_xs()
-                                                    .text_color(rgb(0xc8d0e0))
-                                                    .child("Copy SQL")
+                                                    .text_color(theme.text_secondary_rgb())
+                                                    .child("Copy")
                                                     .on_click(cx.listener({
                                                         let state_model = self.state.clone();
                                                         move |_this, _event, _window, cx| {
@@ -496,32 +488,25 @@ impl Render for DiffView {
                                                             cx.write_to_clipboard(
                                                                 ClipboardItem::new_string(sql),
                                                             );
-                                                            state_model.update(
-                                                                cx,
-                                                                |state, cx| {
-                                                                    state.status_message = Some(
-                                                                        "Copied migration SQL to clipboard"
-                                                                            .to_string(),
-                                                                    );
-                                                                    cx.notify();
-                                                                },
-                                                            );
                                                         }
                                                     })),
                                             )
                                             .child(
                                                 div()
                                                     .id("btn-open-in-editor")
-                                                    .px_2p5()
+                                                    .px_3()
                                                     .py_1()
-                                                    .rounded(px(4.0))
-                                                    .bg(rgb(0x5e81f4))
-                                                    .hover(|s| s.bg(rgb(0x7393f7)))
+                                                    .rounded(px(6.0))
+                                                    .bg(theme.primary_rgb())
+                                                    .hover({
+                                                        let h = theme.primary_hover_rgb();
+                                                        move |s| s.bg(h)
+                                                    })
                                                     .cursor_pointer()
                                                     .text_xs()
                                                     .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .text_color(rgb(0xffffff))
-                                                    .child("Open in SQL Editor")
+                                                    .text_color(theme.on_primary_rgb())
+                                                    .child("Open in Editor")
                                                     .on_click(cx.listener({
                                                         let state_model = self.state.clone();
                                                         move |_this, _event, _window, cx| {
@@ -540,11 +525,11 @@ impl Render for DiffView {
                                 div()
                                     .id("diff-sql-script-scroll")
                                     .flex_1()
-                                    .p_3()
-                                    .rounded(px(6.0))
-                                    .bg(rgb(0x0f1117))
+                                    .p_3p5()
+                                    .rounded(px(10.0))
+                                    .bg(theme.surface_lowest_rgb())
                                     .border_1()
-                                    .border_color(rgb(0x1e2230))
+                                    .border_color(theme.outline_rgb())
                                     .overflow_y_scroll()
                                     .children(numbered_sql_rows),
                             ),

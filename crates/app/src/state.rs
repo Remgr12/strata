@@ -1,3 +1,4 @@
+use crate::theme::{CustomThemeConfig, ThemePalette, ThemeTokenField};
 use arrow::record_batch::RecordBatch;
 use gpui::prelude::*;
 use gpui::*;
@@ -54,28 +55,33 @@ pub struct AppState {
 
     // Auto-updater state
     pub current_version: String,
-    pub install_kind: InstallKind,
     pub update_state: UpdateState,
     pub last_update_check: Option<UpdateCheckResult>,
+
+    // Theme & customizer state
+    pub theme: ThemePalette,
+    pub show_theme_editor: bool,
+    pub editing_theme_field: ThemeTokenField,
+    pub theme_hex_input: String,
 }
 
 impl AppState {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let current_version = env!("CARGO_PKG_VERSION").to_string();
-        let install_kind = InstallKind::detect();
+        let theme = ThemePalette::load_persisted_or_default();
+        let initial_hex = theme.get_field_hex(ThemeTokenField::Substrate);
 
         let mut state = Self {
             active_driver: None,
             file_path: None,
             engine_type: "None".to_string(),
             schema: None,
-            query_buffer: "SELECT 1 AS id, 'Strata Workspace' AS workspace, 'Ready' AS status;"
-                .to_string(),
+            query_buffer: "SELECT 1 AS id, 'Strata' AS workspace, 'Ready' AS status;".to_string(),
             query_results: None,
             execution_time_ms: None,
             is_executing: false,
             is_loading_schema: false,
-            status_message: Some("Open or drop a SQLite, DuckDB, or Parquet file to begin".to_string()),
+            status_message: None,
             error_message: None,
             active_tab: ActiveTab::QueryAndData,
             selected_table: None,
@@ -86,13 +92,132 @@ impl AppState {
             diff_migration_sql: Vec::new(),
             diff_dialect: SqlDialect::Sqlite,
             current_version,
-            install_kind,
             update_state: UpdateState::Idle,
             last_update_check: None,
+            theme,
+            show_theme_editor: false,
+            editing_theme_field: ThemeTokenField::Substrate,
+            theme_hex_input: initial_hex,
         };
 
         state.start_periodic_update_checker(cx);
         state
+    }
+
+    pub fn toggle_light_dark_theme(&mut self, cx: &mut Context<Self>) {
+        self.theme = if self.theme.is_dark {
+            ThemePalette::aerostat_light()
+        } else {
+            ThemePalette::aerostat_dark()
+        };
+        self.theme_hex_input = self.theme.get_field_hex(self.editing_theme_field);
+        let _ = self.theme.save_to_disk();
+        cx.notify();
+    }
+
+    pub fn apply_preset_theme(&mut self, palette: ThemePalette, cx: &mut Context<Self>) {
+        self.theme = palette;
+        self.theme_hex_input = self.theme.get_field_hex(self.editing_theme_field);
+        let _ = self.theme.save_to_disk();
+        cx.notify();
+    }
+
+    pub fn toggle_theme_editor(&mut self, cx: &mut Context<Self>) {
+        self.show_theme_editor = !self.show_theme_editor;
+        if self.show_theme_editor {
+            self.theme_hex_input = self.theme.get_field_hex(self.editing_theme_field);
+        }
+        cx.notify();
+    }
+
+    pub fn select_theme_field(&mut self, field: ThemeTokenField, cx: &mut Context<Self>) {
+        self.editing_theme_field = field;
+        self.theme_hex_input = self.theme.get_field_hex(field);
+        cx.notify();
+    }
+
+    pub fn append_theme_hex_char(&mut self, text: &str, cx: &mut Context<Self>) {
+        for ch in text.chars() {
+            if ch == '#' && self.theme_hex_input.is_empty() {
+                self.theme_hex_input.push('#');
+            } else if ch.is_ascii_hexdigit() && self.theme_hex_input.len() < 7 {
+                if !self.theme_hex_input.starts_with('#') {
+                    self.theme_hex_input.insert(0, '#');
+                }
+                if self.theme_hex_input.len() < 7 {
+                    self.theme_hex_input.push(ch.to_ascii_uppercase());
+                }
+            }
+        }
+        if self.theme_hex_input.len() == 7 {
+            let _ = self
+                .theme
+                .set_field_hex(self.editing_theme_field, &self.theme_hex_input);
+            let _ = self.theme.save_to_disk();
+        }
+        cx.notify();
+    }
+
+    pub fn backspace_theme_hex(&mut self, cx: &mut Context<Self>) {
+        self.theme_hex_input.pop();
+        cx.notify();
+    }
+
+    pub fn apply_theme_hex_input(&mut self, cx: &mut Context<Self>) {
+        match self
+            .theme
+            .set_field_hex(self.editing_theme_field, &self.theme_hex_input)
+        {
+            Ok(()) => {
+                self.theme_hex_input = self.theme.get_field_hex(self.editing_theme_field);
+                let _ = self.theme.save_to_disk();
+                self.error_message = None;
+            }
+            Err(err) => {
+                self.error_message = Some(err);
+            }
+        }
+        cx.notify();
+    }
+
+    pub fn load_theme_from_file(&mut self, path: &str, cx: &mut Context<Self>) {
+        match std::fs::read_to_string(path) {
+            Ok(raw) => match serde_json::from_str::<CustomThemeConfig>(&raw) {
+                Ok(cfg) => match ThemePalette::from_custom_config(&cfg) {
+                    Ok(palette) => {
+                        self.theme = palette;
+                        self.theme_hex_input = self.theme.get_field_hex(self.editing_theme_field);
+                        let _ = self.theme.save_to_disk();
+                        self.status_message = Some(format!("Theme: {}", self.theme.name));
+                    }
+                    Err(e) => self.error_message = Some(e),
+                },
+                Err(e) => self.error_message = Some(format!("Invalid theme JSON: {}", e)),
+            },
+            Err(e) => self.error_message = Some(format!("Failed to read theme file: {}", e)),
+        }
+        cx.notify();
+    }
+
+    pub fn prompt_import_theme(&mut self, cx: &mut Context<Self>) {
+        let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Import Theme JSON".into()),
+        });
+
+        cx.spawn(async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = receiver.await {
+                if let Some(first) = paths.into_iter().next() {
+                    let path_str = first.to_string_lossy().to_string();
+                    let _ = this.update(cx, |state, cx| {
+                        state.load_theme_from_file(&path_str, cx);
+                    });
+                }
+            }
+        })
+        .detach();
     }
 
     /// Periodically checks the Forgejo Releases API for newer versions in the background.
@@ -101,7 +226,6 @@ impl AppState {
         let background = cx.background_executor().clone();
 
         cx.spawn(async move |this, cx| {
-            // Brief initial delay after startup before first check
             background.timer(Duration::from_secs(3)).await;
             loop {
                 let ver = current_version.clone();
@@ -153,10 +277,6 @@ impl AppState {
     /// Trigger an immediate update check against the Forgejo releases endpoint.
     pub fn check_updates_now(&mut self, cx: &mut Context<Self>) {
         self.update_state = UpdateState::Checking;
-        self.status_message = Some(format!(
-            "Checking releases for {} updates...",
-            self.install_kind.label()
-        ));
         cx.notify();
 
         let current_version = self.current_version.clone();
@@ -175,26 +295,15 @@ impl AppState {
                                 version: result.latest_version.clone(),
                                 install_kind: result.install_kind,
                             };
-                            state.status_message = Some(format!(
-                                "Update v{} is available for {}",
-                                result.latest_version,
-                                result.install_kind.label()
-                            ));
                         } else {
                             state.update_state =
                                 UpdateState::UpToDate(result.latest_version.clone());
-                            state.status_message = Some(format!(
-                                "Up to date (v{}, {})",
-                                state.current_version,
-                                state.install_kind.label()
-                            ));
                         }
                         state.last_update_check = Some(result);
                     }
                     Err(err) => {
                         state.update_state = UpdateState::Error("Update check failed".to_string());
-                        state.status_message =
-                            Some(format!("Could not reach releases page: {}", err));
+                        state.status_message = Some(format!("Update check failed: {}", err));
                     }
                 }
                 cx.notify();
@@ -212,11 +321,6 @@ impl AppState {
 
         let ver = check.latest_version.clone();
         self.update_state = UpdateState::Downloading(ver.clone());
-        self.status_message = Some(format!(
-            "Downloading Strata v{} ({})...",
-            ver,
-            check.install_kind.label()
-        ));
         cx.notify();
 
         let background = cx.background_executor().clone();
@@ -270,7 +374,7 @@ impl AppState {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some("Select Baseline Database to Compare".into()),
+            prompt: Some("Select Baseline Database".into()),
         });
 
         cx.spawn(async move |this, cx| {
@@ -310,10 +414,7 @@ impl AppState {
                                 state.snapshot_schema = Some(baseline_schema);
                                 state.snapshot_label = Some(short_name.clone());
                                 state.recompute_diff();
-                                state.status_message = Some(format!(
-                                    "Comparing active schema against baseline '{}'",
-                                    short_name
-                                ));
+                                state.status_message = Some(format!("Baseline: {}", short_name));
                             }
                             Err(err) => {
                                 state.error_message = Some(err);
@@ -329,10 +430,14 @@ impl AppState {
 
     /// Load a database or parquet file by path.
     pub fn load_file(&mut self, path: String, cx: &mut Context<Self>) {
+        if path.ends_with(".json") {
+            self.load_theme_from_file(&path, cx);
+            return;
+        }
+
         self.is_loading_schema = true;
         self.error_message = None;
         self.selected_row = None;
-        self.status_message = Some(format!("Connecting to {}...", path));
         self.file_path = Some(path.clone());
 
         let is_duckdb_or_parquet = path.ends_with(".duckdb")
@@ -386,7 +491,7 @@ impl AppState {
                         state.active_driver = Some(Arc::new(futures::lock::Mutex::new(driver)));
                         state.recompute_diff();
                         state.status_message = Some(format!(
-                            "Connected to {} ({} tables)",
+                            "{} • {} tables",
                             state.short_file_name(),
                             tbl_count
                         ));
@@ -399,7 +504,7 @@ impl AppState {
                     }
                     Err(err) => {
                         state.error_message = Some(err);
-                        state.status_message = Some("Connection failed".to_string());
+                        state.status_message = Some("Connection error".to_string());
                     }
                 }
                 cx.notify();
@@ -413,10 +518,9 @@ impl AppState {
         self.is_loading_schema = true;
         self.error_message = None;
         self.selected_row = None;
-        self.file_path = Some(":memory: (sample)".to_string());
+        self.file_path = Some(":memory:".to_string());
         self.engine_type = "SQLite".to_string();
         self.diff_dialect = SqlDialect::Sqlite;
-        self.status_message = Some("Initializing sample database...".to_string());
         cx.notify();
 
         cx.spawn(async move |this, cx| {
@@ -444,7 +548,6 @@ impl AppState {
                         .map_err(|e| format!("Seed error: {}", e))?;
                 }
 
-                // Capture baseline snapshot before adding orders table so Schema Diff is immediately demonstrable
                 let baseline = driver
                     .introspect_schema()
                     .await
@@ -476,7 +579,7 @@ impl AppState {
                 match init_res {
                     Ok((driver, baseline, schema)) => {
                         state.snapshot_schema = Some(baseline);
-                        state.snapshot_label = Some("v1 baseline snapshot".to_string());
+                        state.snapshot_label = Some("v1 baseline".to_string());
                         state.schema = Some(schema);
                         state.active_driver = Some(Arc::new(futures::lock::Mutex::new(driver)));
                         state.recompute_diff();
@@ -484,8 +587,6 @@ impl AppState {
                         state.query_buffer =
                             "SELECT id, name, email, plan, created_at FROM customers ORDER BY id;"
                                 .to_string();
-                        state.status_message =
-                            Some("Sample workspace loaded (3 tables)".to_string());
                         state.execute_query(cx);
                     }
                     Err(err) => {
@@ -502,17 +603,13 @@ impl AppState {
     pub fn execute_query(&mut self, cx: &mut Context<Self>) {
         let sql = self.query_buffer.trim().to_string();
         if sql.is_empty() {
-            self.error_message = Some("Enter a SQL statement to execute".to_string());
-            cx.notify();
             return;
         }
 
         let driver_arc = match &self.active_driver {
             Some(d) => d.clone(),
             None => {
-                self.error_message = Some(
-                    "No database connected. Open a file or click 'Sample DB' to start.".to_string(),
-                );
+                self.error_message = Some("No active connection".to_string());
                 cx.notify();
                 return;
             }
@@ -521,7 +618,6 @@ impl AppState {
         self.is_executing = true;
         self.error_message = None;
         self.selected_row = None;
-        self.status_message = Some("Running query...".to_string());
         cx.notify();
 
         let upper_sql = sql.to_uppercase();
@@ -556,12 +652,10 @@ impl AppState {
                     Ok(batches) => {
                         let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
                         state.query_results = Some(batches);
-                        state.status_message =
-                            Some(format!("{} rows returned in {} ms", total_rows, elapsed_ms));
+                        state.status_message = Some(format!("{} rows • {} ms", total_rows, elapsed_ms));
                     }
                     Err(err) => {
                         state.error_message = Some(format!("{}", err));
-                        state.status_message = Some("Query failed".to_string());
                     }
                 }
                 cx.notify();
@@ -608,14 +702,8 @@ impl AppState {
     pub fn take_schema_snapshot(&mut self, cx: &mut Context<Self>) {
         if let Some(ref current) = self.schema {
             self.snapshot_schema = Some(current.clone());
-            self.snapshot_label = Some(format!("Snapshot ({})", self.short_file_name()));
-            self.status_message =
-                Some("Baseline schema snapshot captured for comparison".to_string());
+            self.snapshot_label = Some(self.short_file_name());
             self.recompute_diff();
-            cx.notify();
-        } else {
-            self.error_message =
-                Some("Connect a database before capturing a schema snapshot".to_string());
             cx.notify();
         }
     }
@@ -634,7 +722,6 @@ impl AppState {
         if !self.diff_migration_sql.is_empty() {
             self.query_buffer = self.diff_migration_sql.join("\n\n");
             self.active_tab = ActiveTab::QueryAndData;
-            self.status_message = Some("Loaded migration script into SQL editor".to_string());
             cx.notify();
         }
     }
@@ -657,13 +744,13 @@ impl AppState {
     /// Return a compact display name for the currently connected file.
     pub fn short_file_name(&self) -> String {
         match &self.file_path {
-            Some(p) if p.starts_with(":memory:") => p.clone(),
+            Some(p) if p.starts_with(":memory:") => ":memory:".to_string(),
             Some(p) => std::path::Path::new(p)
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or(p)
                 .to_string(),
-            None => "No database".to_string(),
+            None => String::new(),
         }
     }
 }

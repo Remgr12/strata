@@ -19,6 +19,7 @@ impl QueryView {
 impl Render for QueryView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let app_state = self.state.read(cx);
+        let theme = app_state.theme.clone();
         let query_buffer = app_state.query_buffer.clone();
         let is_executing = app_state.is_executing;
         let exec_time = app_state.execution_time_ms;
@@ -56,7 +57,7 @@ impl Render for QueryView {
                             .text_right()
                             .text_xs()
                             .font_family("monospace")
-                            .text_color(rgb(0x43495c))
+                            .text_color(theme.text_muted_rgb())
                             .child(format!("{}", idx + 1)),
                     )
                     .child(
@@ -64,7 +65,7 @@ impl Render for QueryView {
                             .flex_1()
                             .text_xs()
                             .font_family("monospace")
-                            .text_color(rgb(0xeceff4))
+                            .text_color(theme.text_primary_rgb())
                             .child(display_line),
                     ),
             );
@@ -73,52 +74,54 @@ impl Render for QueryView {
         let table_for_select = selected_table.clone();
         let table_for_count = selected_table.clone();
 
+        let chip_bg = theme.surface_container_rgb();
+        let chip_hover = theme.surface_container_high_rgb();
+        let chip_fg = theme.text_secondary_rgb();
+
         div()
             .flex()
             .flex_col()
-            .bg(rgb(0x0f1117))
+            .bg(theme.surface_rgb())
             .border_b_1()
-            .border_color(rgb(0x1e2230))
+            .border_color(theme.outline_rgb())
             .child(
-                // Compact Editor Action Toolbar
+                // Material Action Toolbar
                 div()
                     .flex()
                     .items_center()
                     .justify_between()
-                    .px_3()
+                    .px_3p5()
                     .py_2()
                     .border_b_1()
-                    .border_color(rgb(0x181c26))
+                    .border_color(theme.outline_variant_rgb())
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap_1p5()
+                            .gap_2()
                             .child(
-                                // Primary Run Query Button
+                                // Key CTA Run Button (Soft Dried Apricot #E08A63)
                                 div()
                                     .id("run-query-btn")
                                     .flex()
                                     .items_center()
-                                    .gap_1p5()
-                                    .px_3()
+                                    .px_3p5()
                                     .py_1()
-                                    .rounded(px(5.0))
+                                    .rounded(px(8.0))
                                     .bg(if is_executing {
-                                        rgb(0x282d3e)
+                                        theme.surface_container_high_rgb()
                                     } else {
-                                        rgb(0x5e81f4)
+                                        theme.accent_rgb()
                                     })
-                                    .hover(|s| s.bg(rgb(0x7393f7)))
+                                    .hover({
+                                        let h = theme.accent_hover_rgb();
+                                        move |s| s.bg(h)
+                                    })
                                     .cursor_pointer()
                                     .text_xs()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                    .text_color(rgb(0xffffff))
-                                    .child(if is_executing {
-                                        "Running..."
-                                    } else {
-                                        "Run Query"
-                                    })
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme.on_accent_rgb())
+                                    .child(if is_executing { "Running" } else { "Run" })
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -128,19 +131,18 @@ impl Render for QueryView {
                                         }
                                     })),
                             )
-                            // Quick template chips
                             .child(
                                 div()
                                     .id("chip-select-top")
-                                    .px_2()
+                                    .px_2p5()
                                     .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x141720))
-                                    .hover(|s| s.bg(rgb(0x1c202c)))
+                                    .rounded(px(6.0))
+                                    .bg(chip_bg)
+                                    .hover(move |s| s.bg(chip_hover))
                                     .cursor_pointer()
                                     .text_xs()
-                                    .text_color(rgb(0x949cbb))
-                                    .child("Select 100")
+                                    .text_color(chip_fg)
+                                    .child("Limit 100")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -157,15 +159,15 @@ impl Render for QueryView {
                             .child(
                                 div()
                                     .id("chip-count-rows")
-                                    .px_2()
+                                    .px_2p5()
                                     .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x141720))
-                                    .hover(|s| s.bg(rgb(0x1c202c)))
+                                    .rounded(px(6.0))
+                                    .bg(chip_bg)
+                                    .hover(move |s| s.bg(chip_hover))
                                     .cursor_pointer()
                                     .text_xs()
-                                    .text_color(rgb(0x949cbb))
-                                    .child("Count Rows")
+                                    .text_color(chip_fg)
+                                    .child("Count")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -181,7 +183,6 @@ impl Render for QueryView {
                             ),
                     )
                     .child(
-                        // Right-hand editor utilities (Paste, Copy, Clear, Exec Time)
                         div()
                             .flex()
                             .items_center()
@@ -189,26 +190,27 @@ impl Render for QueryView {
                             .when_some(exec_time, |el, ms| {
                                 el.child(
                                     div()
-                                        .px_2()
+                                        .px_2p5()
                                         .py_0p5()
-                                        .rounded(px(4.0))
-                                        .bg(rgb(0x112820))
+                                        .rounded(px(10.0))
+                                        .bg(theme.telemetry_container_rgb())
                                         .text_xs()
-                                        .text_color(rgb(0x3dd68c))
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(theme.telemetry_rgb())
                                         .child(format!("{} ms", ms)),
                                 )
                             })
                             .child(
                                 div()
                                     .id("btn-paste-sql")
-                                    .px_2()
+                                    .px_2p5()
                                     .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x141720))
-                                    .hover(|s| s.bg(rgb(0x1c202c)))
+                                    .rounded(px(6.0))
+                                    .bg(chip_bg)
+                                    .hover(move |s| s.bg(chip_hover))
                                     .cursor_pointer()
                                     .text_xs()
-                                    .text_color(rgb(0x949cbb))
+                                    .text_color(chip_fg)
                                     .child("Paste")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
@@ -227,39 +229,34 @@ impl Render for QueryView {
                             .child(
                                 div()
                                     .id("btn-copy-sql")
-                                    .px_2()
+                                    .px_2p5()
                                     .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x141720))
-                                    .hover(|s| s.bg(rgb(0x1c202c)))
+                                    .rounded(px(6.0))
+                                    .bg(chip_bg)
+                                    .hover(move |s| s.bg(chip_hover))
                                     .cursor_pointer()
                                     .text_xs()
-                                    .text_color(rgb(0x949cbb))
+                                    .text_color(chip_fg)
                                     .child("Copy")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
                                             let sql = state_model.read(cx).query_buffer.clone();
                                             cx.write_to_clipboard(ClipboardItem::new_string(sql));
-                                            state_model.update(cx, |state, cx| {
-                                                state.status_message =
-                                                    Some("Copied SQL query to clipboard".to_string());
-                                                cx.notify();
-                                            });
                                         }
                                     })),
                             )
                             .child(
                                 div()
                                     .id("btn-clear-sql")
-                                    .px_2()
+                                    .px_2p5()
                                     .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x141720))
-                                    .hover(|s| s.bg(rgb(0x1c202c)))
+                                    .rounded(px(6.0))
+                                    .bg(chip_bg)
+                                    .hover(move |s| s.bg(chip_hover))
                                     .cursor_pointer()
                                     .text_xs()
-                                    .text_color(rgb(0x949cbb))
+                                    .text_color(chip_fg)
                                     .child("Clear")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
@@ -273,21 +270,21 @@ impl Render for QueryView {
                     ),
             )
             .child(
-                // Interactive Focusable SQL Code Surface
+                // SQL Editor Surface
                 div()
                     .id("sql-editor-surface")
                     .track_focus(&self.focus_handle)
                     .w_full()
-                    .min_h(px(76.0))
+                    .min_h(px(72.0))
                     .max_h(px(140.0))
-                    .px_3()
-                    .py_2()
-                    .bg(rgb(0x090a0f))
-                    .border_b_1()
+                    .px_3p5()
+                    .py_2p5()
+                    .bg(theme.surface_lowest_rgb())
+                    .border_b_2()
                     .border_color(if is_focused {
-                        rgb(0x5e81f4)
+                        theme.primary_rgb()
                     } else {
-                        rgb(0x141720)
+                        theme.surface_lowest_rgb()
                     })
                     .cursor_text()
                     .on_click(cx.listener(|this, _event, window, cx| {
@@ -378,15 +375,15 @@ impl Render for QueryView {
                         .flex()
                         .items_center()
                         .justify_between()
-                        .px_3()
+                        .px_3p5()
                         .py_1p5()
-                        .bg(rgb(0x281218))
+                        .bg(theme.danger_container_rgb())
                         .border_t_1()
-                        .border_color(rgb(0x4d1d29))
+                        .border_color(theme.danger_rgb())
                         .child(
                             div()
                                 .text_xs()
-                                .text_color(rgb(0xf2777a))
+                                .text_color(theme.danger_rgb())
                                 .child(format!("{}", err)),
                         ),
                 )

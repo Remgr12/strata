@@ -167,3 +167,81 @@ with open(renderer, 'w') as f:
 print(f"Patched: {renderer}")
 PYEOF
 done
+
+WIN_WINDOWS=$(find "$CARGO_DIR/registry/src" -path "*/gpui-*/src/platform/windows/window.rs" 2>/dev/null)
+for WIN_FILE in $WIN_WINDOWS; do
+    python3 - "$WIN_FILE" << 'PYEOF'
+import sys
+
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+
+old_zoom = '''    fn zoom(&self) {
+        unsafe {
+            if IsWindowVisible(self.0.hwnd).as_bool() {
+                ShowWindowAsync(self.0.hwnd, SW_MAXIMIZE).ok().log_err();
+            } else if let Some(status) = self.0.state.borrow_mut().initial_placement.as_mut() {
+                status.state = WindowOpenState::Maximized;
+            }
+        }
+    }'''
+
+new_zoom = '''    fn zoom(&self) {
+        unsafe {
+            if IsWindowVisible(self.0.hwnd).as_bool() {
+                if self.0.state.borrow().is_maximized() {
+                    ShowWindowAsync(self.0.hwnd, SW_NORMAL).ok().log_err();
+                } else {
+                    ShowWindowAsync(self.0.hwnd, SW_MAXIMIZE).ok().log_err();
+                }
+            } else if let Some(status) = self.0.state.borrow_mut().initial_placement.as_mut() {
+                status.state = WindowOpenState::Maximized;
+            }
+        }
+    }
+
+    fn start_window_move(&self) {
+        unsafe {
+            let _ = ReleaseCapture();
+            PostMessageW(
+                Some(self.0.hwnd),
+                WM_NCLBUTTONDOWN,
+                WPARAM(HTCAPTION as usize),
+                LPARAM(0),
+            )
+            .log_err();
+        }
+    }'''
+
+if old_zoom in content:
+    content = content.replace(old_zoom, new_zoom, 1)
+    with open(path, 'w') as f:
+        f.write(content)
+    print(f"Patched zoom/start_window_move in: {path}")
+else:
+    print(f"zoom/start_window_move already patched or not matched in: {path}")
+PYEOF
+done
+
+GPUI_WINDOWS=$(find "$CARGO_DIR/registry/src" -path "*/gpui-*/src/window.rs" 2>/dev/null)
+for WIN_RS in $GPUI_WINDOWS; do
+    python3 - "$WIN_RS" << 'PYEOF'
+import sys
+
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+
+old_loop = "for (area, hitbox) in &window.rendered_frame.window_control_hitboxes {"
+new_loop = "for (area, hitbox) in window.rendered_frame.window_control_hitboxes.iter().rev() {"
+
+if old_loop in content:
+    content = content.replace(old_loop, new_loop, 1)
+    with open(path, 'w') as f:
+        f.write(content)
+    print(f"Patched window_control_hitboxes order in: {path}")
+else:
+    print(f"window_control_hitboxes already patched in: {path}")
+PYEOF
+done

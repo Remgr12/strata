@@ -27,13 +27,10 @@ impl SchemaTreeView {
 impl Render for SchemaTreeView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let app_state = self.state.read(cx);
+        let theme = app_state.theme.clone();
         let engine_type = app_state.engine_type.clone();
         let has_connection = app_state.file_path.is_some();
         let short_name = app_state.short_file_name();
-        let full_path = app_state
-            .file_path
-            .clone()
-            .unwrap_or_else(|| "Drop a file or open below".to_string());
         let tables = app_state
             .schema
             .as_ref()
@@ -42,102 +39,46 @@ impl Render for SchemaTreeView {
         let selected_table = app_state.selected_table.clone();
         let is_loading = app_state.is_loading_schema;
 
-        let (engine_fg, engine_bg) = match engine_type.as_str() {
-            "SQLite" => (rgb(0x689d6a), rgb(0x14241b)),
-            "DuckDB" => (rgb(0xf5a623), rgb(0x281e11)),
-            "Parquet" => (rgb(0x5e81f4), rgb(0x131b31)),
-            _ => (rgb(0x5c637a), rgb(0x141720)),
-        };
-
         div()
             .flex()
             .flex_col()
-            .w(px(264.0))
+            .w(px(256.0))
             .h_full()
-            .bg(rgb(0x0f1117))
+            .bg(theme.surface_rgb())
             .border_r_1()
-            .border_color(rgb(0x1e2230))
+            .border_color(theme.outline_rgb())
             .child(
-                // Connection Card & Quick Actions
+                // Material Action Header
                 div()
                     .flex()
                     .flex_col()
                     .p_3()
-                    .gap_2p5()
+                    .gap_2()
                     .border_b_1()
-                    .border_color(rgb(0x1e2230))
+                    .border_color(theme.outline_variant_rgb())
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .overflow_hidden()
-                                    .child(
-                                        div()
-                                            .size(px(7.0))
-                                            .rounded_full()
-                                            .bg(if has_connection {
-                                                rgb(0x3dd68c)
-                                            } else {
-                                                rgb(0x43495c)
-                                            }),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(rgb(0xeceff4))
-                                            .overflow_hidden()
-                                            .child(short_name),
-                                    ),
-                            )
-                            .when(has_connection, |el| {
-                                el.child(
-                                    div()
-                                        .px_1p5()
-                                        .py_0p5()
-                                        .rounded(px(4.0))
-                                        .bg(engine_bg)
-                                        .text_xs()
-                                        .font_weight(gpui::FontWeight::MEDIUM)
-                                        .text_color(engine_fg)
-                                        .child(engine_type),
-                                )
-                            }),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(0x5c637a))
-                            .overflow_hidden()
-                            .child(full_path),
-                    )
-                    .child(
-                        // Action Buttons Row
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1p5()
+                            .gap_2()
                             .child(
                                 div()
                                     .id("sidebar-open-file")
                                     .flex_1()
-                                    .py_1()
-                                    .px_2()
-                                    .rounded(px(5.0))
-                                    .bg(rgb(0x5e81f4))
-                                    .hover(|s| s.bg(rgb(0x7393f7)))
+                                    .py_1p5()
+                                    .px_3()
+                                    .rounded(px(8.0))
+                                    .bg(theme.accent_rgb())
+                                    .hover({
+                                        let h = theme.accent_hover_rgb();
+                                        move |s| s.bg(h)
+                                    })
                                     .cursor_pointer()
                                     .text_center()
                                     .text_xs()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                    .text_color(rgb(0xffffff))
-                                    .child("Open File")
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme.on_accent_rgb())
+                                    .child("Open")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -151,19 +92,20 @@ impl Render for SchemaTreeView {
                                 div()
                                     .id("sidebar-demo-db")
                                     .flex_1()
-                                    .py_1()
-                                    .px_2()
-                                    .rounded(px(5.0))
-                                    .bg(rgb(0x181c26))
-                                    .border_1()
-                                    .border_color(rgb(0x252a3a))
-                                    .hover(|s| s.bg(rgb(0x212634)))
+                                    .py_1p5()
+                                    .px_3()
+                                    .rounded(px(8.0))
+                                    .bg(theme.primary_rgb())
+                                    .hover({
+                                        let h = theme.primary_hover_rgb();
+                                        move |s| s.bg(h)
+                                    })
                                     .cursor_pointer()
                                     .text_center()
                                     .text_xs()
                                     .font_weight(gpui::FontWeight::MEDIUM)
-                                    .text_color(rgb(0xc8d0e0))
-                                    .child("Sample DB")
+                                    .text_color(theme.on_primary_rgb())
+                                    .child("Sample")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -175,7 +117,6 @@ impl Render for SchemaTreeView {
                             ),
                     )
                     .child(
-                        // Secondary quick-connect row for empty scratch engines
                         div()
                             .flex()
                             .items_center()
@@ -184,16 +125,19 @@ impl Render for SchemaTreeView {
                                 div()
                                     .id("btn-quick-sqlite")
                                     .flex_1()
-                                    .py_0p5()
+                                    .py_1()
                                     .px_2()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x141720))
-                                    .hover(|s| s.bg(rgb(0x1c202c)))
+                                    .rounded(px(6.0))
+                                    .bg(theme.surface_container_rgb())
+                                    .hover({
+                                        let h = theme.surface_container_high_rgb();
+                                        move |s| s.bg(h)
+                                    })
                                     .cursor_pointer()
                                     .text_center()
                                     .text_xs()
-                                    .text_color(rgb(0x949cbb))
-                                    .child("+ Memory SQLite")
+                                    .text_color(theme.text_secondary_rgb())
+                                    .child("SQLite")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -207,16 +151,19 @@ impl Render for SchemaTreeView {
                                 div()
                                     .id("btn-quick-duckdb")
                                     .flex_1()
-                                    .py_0p5()
+                                    .py_1()
                                     .px_2()
-                                    .rounded(px(4.0))
-                                    .bg(rgb(0x141720))
-                                    .hover(|s| s.bg(rgb(0x1c202c)))
+                                    .rounded(px(6.0))
+                                    .bg(theme.surface_container_rgb())
+                                    .hover({
+                                        let h = theme.surface_container_high_rgb();
+                                        move |s| s.bg(h)
+                                    })
                                     .cursor_pointer()
                                     .text_center()
                                     .text_xs()
-                                    .text_color(rgb(0x949cbb))
-                                    .child("+ Scratch DuckDB")
+                                    .text_color(theme.text_secondary_rgb())
+                                    .child("DuckDB")
                                     .on_click(cx.listener({
                                         let state_model = self.state.clone();
                                         move |_this, _event, _window, cx| {
@@ -226,73 +173,102 @@ impl Render for SchemaTreeView {
                                         }
                                     })),
                             ),
-                    ),
+                    )
+                    .when(has_connection, |el| {
+                        el.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .px_2p5()
+                                .py_1p5()
+                                .rounded(px(8.0))
+                                .bg(theme.surface_container_rgb())
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .overflow_hidden()
+                                        .child(
+                                            div()
+                                                .size(px(6.0))
+                                                .rounded_full()
+                                                .bg(theme.telemetry_rgb()),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .text_color(theme.text_primary_rgb())
+                                                .overflow_hidden()
+                                                .child(short_name),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py_0p5()
+                                        .rounded(px(4.0))
+                                        .bg(theme.telemetry_container_rgb())
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(theme.telemetry_rgb())
+                                        .child(engine_type),
+                                ),
+                        )
+                    }),
             )
             .child(
-                // Section Title Bar
+                // Section Header
                 div()
                     .flex()
                     .items_center()
                     .justify_between()
                     .px_3()
-                    .py_2()
+                    .pt_3()
+                    .pb_1p5()
                     .child(
                         div()
                             .text_xs()
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .text_color(rgb(0x5c637a))
-                            .child("Tables"),
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.text_muted_rgb())
+                            .child("SCHEMA"),
                     )
                     .child(
                         div()
-                            .px_1p5()
-                            .rounded(px(4.0))
-                            .bg(rgb(0x141720))
+                            .px_2()
+                            .py_0p5()
+                            .rounded(px(10.0))
+                            .bg(theme.telemetry_container_rgb())
                             .text_xs()
-                            .text_color(rgb(0x949cbb))
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(theme.telemetry_rgb())
                             .child(format!("{}", tables.len())),
                     ),
             )
             .child(
-                // Tables Tree Scroll Area
+                // Schema Tree Scroll Area
                 div()
                     .id("tables-tree-scroll")
                     .flex_1()
                     .overflow_y_scroll()
-                    .px_2()
+                    .px_2p5()
                     .pb_3()
                     .child(if is_loading {
                         div()
-                            .p_4()
+                            .py_6()
                             .text_center()
                             .text_xs()
-                            .text_color(rgb(0x949cbb))
-                            .child("Introspecting schema...")
+                            .text_color(theme.text_muted_rgb())
+                            .child("Loading...")
                     } else if tables.is_empty() {
                         div()
-                            .p_4()
-                            .rounded(px(6.0))
-                            .bg(rgb(0x12151e))
-                            .border_1()
-                            .border_color(rgb(0x1a1e2b))
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .gap_1p5()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                    .text_color(rgb(0x949cbb))
-                                    .child("No tables loaded"),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_center()
-                                    .text_color(rgb(0x5c637a))
-                                    .child("Click 'Sample DB' above or drop a database file into the window."),
-                            )
+                            .py_6()
+                            .text_center()
+                            .text_xs()
+                            .text_color(theme.text_muted_rgb())
+                            .child("No tables")
                     } else {
                         let mut table_nodes = Vec::new();
                         for tbl in &tables {
@@ -308,11 +284,10 @@ impl Render for SchemaTreeView {
                                         .flex()
                                         .items_center()
                                         .justify_between()
-                                        .pl_6()
+                                        .pl_3()
                                         .pr_2()
                                         .py_1()
-                                        .rounded(px(4.0))
-                                        .hover(|s| s.bg(rgb(0x141720)))
+                                        .rounded(px(6.0))
                                         .text_xs()
                                         .child(
                                             div()
@@ -321,7 +296,7 @@ impl Render for SchemaTreeView {
                                                 .gap_1p5()
                                                 .child(
                                                     div()
-                                                        .text_color(rgb(0xc8d0e0))
+                                                        .text_color(theme.text_secondary_rgb())
                                                         .child(col.name.clone()),
                                                 )
                                                 .when(col.is_primary_key, |el| {
@@ -329,8 +304,8 @@ impl Render for SchemaTreeView {
                                                         div()
                                                             .px_1()
                                                             .rounded(px(3.0))
-                                                            .bg(rgb(0x282012))
-                                                            .text_color(rgb(0xf5a623))
+                                                            .bg(theme.accent_container_rgb())
+                                                            .text_color(theme.accent_rgb())
                                                             .font_weight(gpui::FontWeight::SEMIBOLD)
                                                             .child("PK"),
                                                     )
@@ -339,7 +314,7 @@ impl Render for SchemaTreeView {
                                         .child(
                                             div()
                                                 .font_family("monospace")
-                                                .text_color(rgb(0x5c637a))
+                                                .text_color(theme.telemetry_rgb())
                                                 .child(type_repr),
                                         ),
                                 );
@@ -348,11 +323,13 @@ impl Render for SchemaTreeView {
                             let is_collapsed = self.collapsed_tables.contains(&tbl_name);
                             let tbl_name_for_click = tbl_name.clone();
                             let tbl_name_for_toggle = tbl_name.clone();
+                            let hover_bg = theme.surface_container_rgb();
+
                             table_nodes.push(
                                 div()
                                     .flex()
                                     .flex_col()
-                                    .mb_0p5()
+                                    .mb_1()
                                     .child(
                                         div()
                                             .id(ElementId::Name(
@@ -361,16 +338,16 @@ impl Render for SchemaTreeView {
                                             .flex()
                                             .items_center()
                                             .justify_between()
-                                            .px_2()
+                                            .px_2p5()
                                             .py_1p5()
-                                            .rounded(px(5.0))
+                                            .rounded(px(8.0))
                                             .cursor_pointer()
                                             .when(is_selected, |el| {
-                                                el.bg(rgb(0x1c2233))
-                                                    .border_1()
-                                                    .border_color(rgb(0x2c3652))
+                                                el.bg(theme.primary_rgb())
                                             })
-                                            .hover(|s| s.bg(rgb(0x161a24)))
+                                            .when(!is_selected, |el| {
+                                                el.hover(move |s| s.bg(hover_bg))
+                                            })
                                             .on_click(cx.listener({
                                                 let state_model = self.state.clone();
                                                 let t_name = tbl_name_for_click.clone();
@@ -396,7 +373,11 @@ impl Render for SchemaTreeView {
                                                             ))
                                                             .w(px(14.0))
                                                             .text_xs()
-                                                            .text_color(rgb(0x5c637a))
+                                                            .text_color(if is_selected {
+                                                                theme.on_primary_rgb()
+                                                            } else {
+                                                                theme.text_muted_rgb()
+                                                            })
                                                             .child(if is_collapsed {
                                                                 "▸"
                                                             } else {
@@ -406,6 +387,7 @@ impl Render for SchemaTreeView {
                                                                 let t_name =
                                                                     tbl_name_for_toggle.clone();
                                                                 move |this, _event, _window, cx| {
+                                                                    cx.stop_propagation();
                                                                     this.toggle_table_collapse(
                                                                         &t_name,
                                                                     );
@@ -422,9 +404,9 @@ impl Render for SchemaTreeView {
                                                             })
                                                             .text_xs()
                                                             .text_color(if is_selected {
-                                                                rgb(0xffffff)
+                                                                theme.on_primary_rgb()
                                                             } else {
-                                                                rgb(0xeceff4)
+                                                                theme.text_primary_rgb()
                                                             })
                                                             .child(tbl_name),
                                                     ),
@@ -432,11 +414,26 @@ impl Render for SchemaTreeView {
                                             .child(
                                                 div()
                                                     .text_xs()
-                                                    .text_color(rgb(0x5c637a))
+                                                    .text_color(if is_selected {
+                                                        theme.on_primary_rgb()
+                                                    } else {
+                                                        theme.telemetry_rgb()
+                                                    })
                                                     .child(format!("{}", tbl.columns.len())),
                                             ),
                                     )
-                                    .when(!is_collapsed, |el| el.children(col_nodes)),
+                                    .when(!is_collapsed, |el| {
+                                        el.child(
+                                            div()
+                                                .ml_4()
+                                                .mt_0p5()
+                                                .border_l_1()
+                                                .border_color(theme.outline_variant_rgb())
+                                                .flex()
+                                                .flex_col()
+                                                .children(col_nodes),
+                                        )
+                                    }),
                             );
                         }
                         div().flex().flex_col().children(table_nodes)
