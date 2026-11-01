@@ -81,6 +81,8 @@ jobs:
             wixl \
             pkg-config \
             build-essential
+          $SUDO update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          $SUDO update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
 
       - name: Install Rust toolchain with Windows target
         run: |
