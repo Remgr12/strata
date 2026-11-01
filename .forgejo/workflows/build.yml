@@ -12,19 +12,22 @@ env:
 
 jobs:
   build-linux:
-    name: Build Linux
+    name: Build Linux & Flatpak
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Linux system dependencies
+      - name: Install Linux system dependencies & Flatpak tools
         run: |
           if command -v sudo >/dev/null 2>&1; then SUDO="sudo"; else SUDO=""; fi
           $SUDO apt-get update
           $SUDO apt-get install -y --no-install-recommends \
             curl \
             zstd \
+            flatpak \
+            flatpak-builder \
+            ostree \
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxcb1-dev \
@@ -60,16 +63,18 @@ jobs:
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo build --release -p strata-app
 
-      - name: Package Linux artifact
+      - name: Package Linux binary & Flatpak bundle
         run: |
           mkdir -p dist
           cp target/release/strata-app dist/strata-linux
+          chmod +x scripts/build-flatpak.sh
+          bash scripts/build-flatpak.sh dist/strata-linux dist/strata-linux-x86_64.flatpak x86_64
 
-      - name: Upload Linux artifact
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v3
         with:
           name: strata-linux
-          path: dist/strata-linux
+          path: dist/
 
   build-windows:
     name: Cross-compile Windows (x86_64)
@@ -119,25 +124,27 @@ jobs:
           cargo fetch --target x86_64-pc-windows-gnu
           bash scripts/patch-gpui.sh
 
-      - name: Cross-compile Windows release binary
+      - name: Cross-compile Windows release binary (with static MinGW runtime bundling)
         env:
           CC_x86_64_pc_windows_gnu: "x86_64-w64-mingw32-gcc-posix"
           CXX_x86_64_pc_windows_gnu: "x86_64-w64-mingw32-g++-posix"
-          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: "x86_64-w64-mingw32-gcc-posix"
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: "x86_64-w64-mingw32-g++-posix"
           CFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
           CXXFLAGS_x86_64_pc_windows_gnu: "-Wa,-mbig-obj"
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo build --release -p strata-app --target x86_64-pc-windows-gnu
 
-      - name: Build Windows installer (.msi)
+      - name: Build Windows installer (.msi) and standalone executable (.exe)
         run: |
           mkdir -p dist
           cp target/x86_64-pc-windows-gnu/release/strata-app.exe dist/strata.exe
           cp $(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libstdc++-6.dll" | grep posix | head -n 1) dist/
           cp $(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libgcc_s_seh-1.dll" | grep posix | head -n 1) dist/
           cp $(find /usr/x86_64-w64-mingw32 -name "libwinpthread-1.dll" | head -n 1) dist/
-          x86_64-w64-mingw32-strip dist/strata.exe dist/libstdc++-6.dll dist/libgcc_s_seh-1.dll dist/libwinpthread-1.dll
+          x86_64-w64-mingw32-strip --strip-unneeded dist/strata.exe
+          # Strip .rsrc from bundled MinGW DLLs so Windows Installer MsiFileHash versioning never skips libwinpthread-1.dll
+          x86_64-w64-mingw32-strip --strip-unneeded -R .rsrc dist/libstdc++-6.dll dist/libgcc_s_seh-1.dll dist/libwinpthread-1.dll
           VERSION="${GITHUB_REF_NAME#v}"
           if [ -n "$VERSION" ] && [ "$VERSION" != "$GITHUB_REF_NAME" ]; then
             sed -i "s/^[[:space:]]*Version=\"[^\"]*\"/           Version=\"$VERSION\"/" packaging/windows/strata.wxs

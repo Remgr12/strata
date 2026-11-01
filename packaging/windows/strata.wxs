@@ -3,7 +3,7 @@
   <Product Id="*"
            Name="Strata"
            Language="1033"
-           Version="0.0.3.1"
+           Version="0.0.4"
            Manufacturer="Zsombor Simon"
            UpgradeCode="B5A3C4E5-6D7F-4A9B-8C1D-2E3F4A5B6C7D">
 
@@ -39,30 +39,34 @@
 
   <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <Component Id="MainExecutable" Guid="A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D" Win64="yes">
+      <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="A1B2C3D4-E5F6-4A5B-8C9D-1E2F3A4B5C6D" Win64="yes">
         <File Id="StrataExe"
+              Name="strata.exe"
               Source="dist/strata.exe"
               KeyPath="yes" />
       </Component>
-      <Component Id="LibStdCpp" Guid="C1D2E3F4-A5B6-4C7D-8E9F-0A1B2C3D4E5F" Win64="yes">
+      <Component Id="LibStdCpp" Directory="INSTALLFOLDER" Guid="C1D2E3F4-A5B6-4C7D-8E9F-1A2B3C4D5E6F" Win64="yes">
         <File Id="LibStdCppDll"
+              Name="libstdc++-6.dll"
               Source="dist/libstdc++-6.dll"
               KeyPath="yes" />
       </Component>
-      <Component Id="LibGcc" Guid="D2E3F4A5-B6C7-4D8E-9F0A-1B2C3D4E5F6A" Win64="yes">
+      <Component Id="LibGcc" Directory="INSTALLFOLDER" Guid="D2E3F4A5-B6C7-4D8E-9F0A-2B3C4D5E6F7A" Win64="yes">
         <File Id="LibGccDll"
+              Name="libgcc_s_seh-1.dll"
               Source="dist/libgcc_s_seh-1.dll"
               KeyPath="yes" />
       </Component>
-      <Component Id="LibWinPthread" Guid="E3F4A5B6-C7D8-4E9F-0A1B-2C3D4E5F6A7B" Win64="yes">
+      <Component Id="LibWinPthread" Directory="INSTALLFOLDER" Guid="E3F4A5B6-C7D8-4E9F-0A1B-3C4D5E6F7A8B" Win64="yes">
         <File Id="LibWinPthreadDll"
+              Name="libwinpthread-1.dll"
               Source="dist/libwinpthread-1.dll"
               KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
     <DirectoryRef Id="ApplicationProgramsFolder">
-      <Component Id="ApplicationShortcut" Guid="B2C3D4E5-F6A7-4B8C-9D0E-1F2A3B4C5D6E" Win64="yes">
+      <Component Id="ApplicationShortcut" Guid="B2C3D4E5-F6A7-4B8C-9D0E-2F3A4B5C6D7E" Win64="yes">
         <Shortcut Id="ApplicationStartMenuShortcut"
                   Name="Strata"
                   Description="Native GPU-accelerated desktop database client"

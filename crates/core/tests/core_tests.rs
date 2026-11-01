@@ -1,7 +1,8 @@
 use arrow_array::{Array, Float64Array, Int64Array, StringArray};
 use strata_core::{
-    diff_schemas, Column, DataType, DatabaseDriver, DatabaseSchema, DuckDbDriver, Index,
-    SqlDialect, SqliteDriver, Table,
+    diff_schemas, is_newer_version, parse_sha256sums, parse_version, select_asset_for_install,
+    Column, DataType, DatabaseDriver, DatabaseSchema, DuckDbDriver, Index, InstallKind,
+    ReleaseAsset, ReleaseInfo, SqlDialect, SqliteDriver, Table,
 };
 
 #[tokio::test]
@@ -174,4 +175,70 @@ async fn test_duckdb_driver_lifecycle() {
     let batch = &batches[0];
     assert_eq!(batch.num_rows(), 1);
     assert_eq!(batch.num_columns(), 3);
+}
+
+#[test]
+fn test_updater_version_comparison_and_asset_selection() {
+    assert_eq!(parse_version("v0.0.3.1"), vec![0, 0, 3, 1]);
+    assert_eq!(parse_version("0.0.4"), vec![0, 0, 4]);
+    assert!(is_newer_version("0.0.3.1", "v0.0.4"));
+    assert!(is_newer_version("0.0.3", "0.0.3.1"));
+    assert!(!is_newer_version("0.0.4", "0.0.3.1"));
+    assert!(!is_newer_version("0.0.4", "v0.0.4"));
+
+    let release = ReleaseInfo {
+        tag_name: "v0.0.4".to_string(),
+        name: "Strata v0.0.4".to_string(),
+        body: "Release notes".to_string(),
+        html_url: "https://git.soventa.tech/moha/strata/releases/tag/v0.0.4".to_string(),
+        prerelease: false,
+        draft: false,
+        assets: vec![
+            ReleaseAsset {
+                name: "strata-linux".to_string(),
+                browser_download_url: "https://example.com/strata-linux".to_string(),
+                size: 100,
+            },
+            ReleaseAsset {
+                name: "strata-linux-x86_64.flatpak".to_string(),
+                browser_download_url: "https://example.com/strata-linux-x86_64.flatpak".to_string(),
+                size: 200,
+            },
+            ReleaseAsset {
+                name: "strata-windows-x86_64.msi".to_string(),
+                browser_download_url: "https://example.com/strata-windows-x86_64.msi".to_string(),
+                size: 300,
+            },
+            ReleaseAsset {
+                name: "strata-windows-x86_64.exe".to_string(),
+                browser_download_url: "https://example.com/strata-windows-x86_64.exe".to_string(),
+                size: 400,
+            },
+        ],
+    };
+
+    let msi = select_asset_for_install(&release, InstallKind::WindowsMsi).unwrap();
+    assert_eq!(msi.name, "strata-windows-x86_64.msi");
+
+    let exe = select_asset_for_install(&release, InstallKind::WindowsPortable).unwrap();
+    assert_eq!(exe.name, "strata-windows-x86_64.exe");
+
+    let flatpak = select_asset_for_install(&release, InstallKind::LinuxFlatpak).unwrap();
+    assert_eq!(flatpak.name, "strata-linux-x86_64.flatpak");
+
+    let linux = select_asset_for_install(&release, InstallKind::LinuxNative).unwrap();
+    assert_eq!(linux.name, "strata-linux");
+
+    let sums = parse_sha256sums(
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  strata-linux\n\
+         abcd1234  *strata-windows-x86_64.msi\n",
+    );
+    assert_eq!(
+        sums.get("strata-linux").map(|s| s.as_str()),
+        Some("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+    );
+    assert_eq!(
+        sums.get("strata-windows-x86_64.msi").map(|s| s.as_str()),
+        Some("abcd1234")
+    );
 }

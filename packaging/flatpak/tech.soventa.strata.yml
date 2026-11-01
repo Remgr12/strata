@@ -1,0 +1,43 @@
+app-id: tech.soventa.strata
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: strata
+
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=host
+  - --talk-name=org.freedesktop.Flatpak
+  - --talk-name=org.freedesktop.portal.Desktop
+
+modules:
+  - name: strata
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 strata-linux /app/bin/strata
+      - install -Dm644 packaging/flatpak/tech.soventa.strata.desktop /app/share/applications/tech.soventa.strata.desktop
+      - install -Dm644 packaging/flatpak/tech.soventa.strata.metainfo.xml /app/share/metainfo/tech.soventa.strata.metainfo.xml
+      - install -Dm644 assets/icon.svg /app/share/icons/hicolor/scalable/apps/tech.soventa.strata.svg
+      - install -Dm644 assets/icon-16.png /app/share/icons/hicolor/16x16/apps/tech.soventa.strata.png
+      - install -Dm644 assets/icon-24.png /app/share/icons/hicolor/24x24/apps/tech.soventa.strata.png
+      - install -Dm644 assets/icon-32.png /app/share/icons/hicolor/32x32/apps/tech.soventa.strata.png
+      - install -Dm644 assets/icon-48.png /app/share/icons/hicolor/48x48/apps/tech.soventa.strata.png
+      - install -Dm644 assets/icon-64.png /app/share/icons/hicolor/64x64/apps/tech.soventa.strata.png
+      - install -Dm644 assets/icon-128.png /app/share/icons/hicolor/128x128/apps/tech.soventa.strata.png
+      - install -Dm644 assets/icon-256.png /app/share/icons/hicolor/256x256/apps/tech.soventa.strata.png
+      - install -Dm644 assets/icon-512.png /app/share/icons/hicolor/512x512/apps/tech.soventa.strata.png
+    sources:
+      - type: file
+        path: ../../dist/strata-linux
+        dest-filename: strata-linux
+        x-checker-data:
+          type: json
+          url: https://git.soventa.tech/api/v1/repos/moha/strata/releases/latest
+          version-query: .tag_name | sub("^v"; "")
+          url-query: .assets[] | select(.name == "strata-linux") | .browser_download_url
+      - type: dir
+        path: ../..

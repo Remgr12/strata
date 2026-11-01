@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>tech.soventa.strata</id>
+  <name>Strata</name>
+  <summary>Native GPU-accelerated local database client and schema diffing utility</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="tech.soventa">
+    <name>Zsombor Simon</name>
+  </developer>
+  <update_contact>zsombor@mailbox.org</update_contact>
+
+  <description>
+    <p>
+      Strata is a native, GPU-accelerated desktop database client and declarative schema diffing utility built in pure Rust with Zed's GPUI framework.
+    </p>
+    <p>
+      Designed for embedded and analytical data files including SQLite, DuckDB, libSQL, and Apache Parquet, Strata renders query results directly from Apache Arrow RecordBatches and generates SQLite and DuckDB schema migrations.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">tech.soventa.strata.desktop</launchable>
+
+  <url type="homepage">https://git.soventa.tech/moha/strata</url>
+  <url type="bugtracker">https://tasks.soventa.tech/projects/3</url>
+  <url type="help">https://docs.soventa.tech/books/strata</url>
+  <url type="vcs-browser">https://git.soventa.tech/moha/strata</url>
+
+  <Branding>
+    <color type="primary" scheme_preference="dark">#0f1117</color>
+    <color type="primary" scheme_preference="light">#5e81f4</color>
+  </Branding>
+
+  <provides>
+    <binary>strata</binary>
+    <mediatype>application/x-sqlite3</mediatype>
+    <mediatype>application/vnd.sqlite3</mediatype>
+    <mediatype>application/vnd.apache.parquet</mediatype>
+  </provides>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.0.4" date="2026-11-01">
+      <description>
+        <p>Complete UI redesign with integrated custom titlebar window controls, static MinGW runtime bundling on Windows, Linux Flatpak distribution, and automatic release update checking.</p>
+      </description>
+    </release>
+    <release version="0.0.3.1" date="2026-11-01">
+      <description>
+        <p>Windows MSI installer and Common Controls v6 manifest hotfix.</p>
+      </description>
+    </release>
+  </releases>
+</component>

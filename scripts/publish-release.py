@@ -62,7 +62,7 @@ def main():
     assets_dir = os.path.abspath("dist-release")
     os.makedirs(assets_dir, exist_ok=True)
 
-    # 1. Package Linux binary & archive
+    # 1. Package Linux binary, archive & Flatpak bundle
     linux_bin = find_file("artifacts/linux", "strata-linux")
     if linux_bin:
         os.chmod(linux_bin, 0o755)
@@ -78,7 +78,16 @@ def main():
     else:
         print("WARNING: strata-linux not found under artifacts/linux", file=sys.stderr)
 
-    # 2. Package Windows installer & portable zip
+    linux_flatpak = find_file("artifacts/linux", "strata-linux-x86_64.flatpak")
+    if linux_flatpak:
+        fp_dest = os.path.join(assets_dir, "strata-linux-x86_64.flatpak")
+        with open(linux_flatpak, "rb") as src, open(fp_dest, "wb") as dst:
+            dst.write(src.read())
+        print(f"Copied Linux Flatpak bundle: {fp_dest}")
+    else:
+        print("WARNING: strata-linux-x86_64.flatpak not found under artifacts/linux", file=sys.stderr)
+
+    # 2. Package Windows MSI installer, standalone EXE & portable ZIP
     win_msi = find_file("artifacts/windows", "strata.msi")
     if win_msi:
         msi_dest = os.path.join(assets_dir, "strata-windows-x86_64.msi")
@@ -90,6 +99,11 @@ def main():
 
     win_exe = find_file("artifacts/windows", "strata.exe")
     if win_exe:
+        exe_dest = os.path.join(assets_dir, "strata-windows-x86_64.exe")
+        with open(win_exe, "rb") as src, open(exe_dest, "wb") as dst:
+            dst.write(src.read())
+        print(f"Copied standalone Windows executable: {exe_dest}")
+
         zip_dest = os.path.join(assets_dir, "strata-windows-x86_64.zip")
         with zipfile.ZipFile(zip_dest, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.write(win_exe, "strata.exe")
@@ -97,14 +111,16 @@ def main():
                 dll_path = find_file("artifacts/windows", dll_name)
                 if dll_path:
                     zf.write(dll_path, dll_name)
-                else:
-                    print(f"WARNING: DLL {dll_name} not found under artifacts/windows", file=sys.stderr)
         print(f"Packaged Windows portable zip: {zip_dest}")
     else:
         print("WARNING: strata.exe not found under artifacts/windows", file=sys.stderr)
 
     # 3. Generate SHA256SUMS
-    asset_files = [f for f in sorted(os.listdir(assets_dir)) if os.path.isfile(os.path.join(assets_dir, f)) and f != "SHA256SUMS"]
+    asset_files = [
+        f
+        for f in sorted(os.listdir(assets_dir))
+        if os.path.isfile(os.path.join(assets_dir, f)) and f != "SHA256SUMS"
+    ]
     if not asset_files:
         print("ERROR: No assets found in dist-release to publish!", file=sys.stderr)
         sys.exit(1)
@@ -136,18 +152,23 @@ def main():
         if e.code == 404:
             print(f"Release for {clean_tag} does not exist yet. Creating...")
         else:
-            print(f"HTTPError checking release for {clean_tag}: {e.code} {e.read().decode()}", file=sys.stderr)
+            print(
+                f"HTTPError checking release for {clean_tag}: {e.code} {e.read().decode()}",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
     if not rel_id:
         create_url = f"{api_url}/repos/{repository}/releases"
-        body = json.dumps({
-            "tag_name": clean_tag,
-            "name": f"Strata {clean_tag}",
-            "body": f"Release {clean_tag}",
-            "draft": False,
-            "prerelease": False,
-        }).encode()
+        body = json.dumps(
+            {
+                "tag_name": clean_tag,
+                "name": f"Strata {clean_tag}",
+                "body": f"Release {clean_tag}",
+                "draft": False,
+                "prerelease": False,
+            }
+        ).encode()
         req = urllib.request.Request(create_url, data=body, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(req) as resp:
@@ -185,7 +206,7 @@ def main():
             print(f"Deleting existing asset {fname} (ID: {del_id})...")
             try:
                 del_req = urllib.request.Request(del_url, headers=headers, method="DELETE")
-                with urllib.request.urlopen(del_req) as resp:
+                with urllib.request.urlopen(del_req):
                     pass
             except urllib.error.HTTPError as e:
                 print(f"Warning: failed to delete old asset {fname}: {e.code}", file=sys.stderr)
@@ -193,10 +214,15 @@ def main():
         print(f"Uploading {fname} ({os.path.getsize(fpath)} bytes)...")
         upload_endpoint = f"{assets_url}?name={urllib.parse.quote(fname)}"
         curl_cmd = [
-            "curl", "-s", "-S", "-f",
-            "-H", f"Authorization: token {token}",
-            "-F", f"attachment=@{fpath};filename={fname}",
-            upload_endpoint
+            "curl",
+            "-s",
+            "-S",
+            "-f",
+            "-H",
+            f"Authorization: token {token}",
+            "-F",
+            f"attachment=@{fpath};filename={fname}",
+            upload_endpoint,
         ]
         result = subprocess.run(curl_cmd, capture_output=True, text=True)
         if result.returncode != 0:
