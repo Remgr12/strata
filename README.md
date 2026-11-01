@@ -12,7 +12,7 @@
   <p>
     <a href="#credits"><img alt="Lead developer" src="https://img.shields.io/badge/lead%20developer-Zsombor%20Simon-58a9ff" /></a>
     <a href="https://git.soventa.tech/moha/strata"><img alt="Repository" src="https://img.shields.io/badge/forgejo-git.soventa.tech-58a9ff" /></a>
-    <a href="https://git.soventa.tech/moha/strata/releases"><img alt="Release" src="https://img.shields.io/badge/release-v0.0.2-58a9ff" /></a>
+    <a href="https://git.soventa.tech/moha/strata/releases"><img alt="Release" src="https://img.shields.io/badge/release-v0.0.3-58a9ff" /></a>
     <a href="#license"><img alt="License" src="https://img.shields.io/badge/license-MIT-9e6bfa" /></a>
   </p>
 </div>
@@ -128,6 +128,7 @@ cargo build --release -p strata-app
 
 ## Release History
 
+- **v0.0.3** - Brand identity overhaul and desktop icon assets: integrate official dark-mode and light-mode vector logos with automatic theme adaptation, embed assets into the GPUI desktop titlebar with vector rendering, generate full-suite multi-resolution desktop icon sets (16px through 512px PNG and Windows multi-resolution ICO), add Linux XDG desktop entry (`packaging/linux/strata.desktop`), and configure Windows MSI installer shortcuts with application icons.
 - **v0.0.2** - Fix Windows distribution and installer: package MinGW runtime DLLs (`libstdc++-6.dll`, `libgcc_s_seh-1.dll`, `libwinpthread-1.dll`), add interactive WiX MSI installation wizard with license agreement, configure 64-bit installation directory, and create Start Menu and Desktop application shortcuts.
 - **v0.0.1** - Initial release of Strata: modular workspace architecture (`crates/core` + `crates/app`), SQLite & DuckDB/Parquet drivers with zero-copy Apache Arrow integration (STRATA-4, STRATA-5), canonical schema AST (STRATA-2), declarative migration generator (STRATA-6), GPUI virtualized uniform list data grid (STRATA-9), multi-line SQL editor (STRATA-9), collapsible schema tree explorer (STRATA-9), visual schema diffing tab (STRATA-9), reactive background async coordination (STRATA-8), and window drag-and-drop file ingestion (STRATA-10).
 
