@@ -78,6 +78,8 @@ jobs:
   build-windows:
     name: Cross-compile Windows (x86_64)
     runs-on: ubuntu-latest
+    container:
+      image: node:22-trixie
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
