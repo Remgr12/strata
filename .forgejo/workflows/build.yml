@@ -2,13 +2,8 @@ name: Build & Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
@@ -141,6 +136,10 @@ jobs:
           cp $(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libgcc_s_seh-1.dll" | grep posix | head -n 1) dist/
           cp $(find /usr/x86_64-w64-mingw32 -name "libwinpthread-1.dll" | head -n 1) dist/
           x86_64-w64-mingw32-strip dist/strata.exe dist/libstdc++-6.dll dist/libgcc_s_seh-1.dll dist/libwinpthread-1.dll
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -n "$VERSION" ] && [ "$VERSION" != "$GITHUB_REF_NAME" ]; then
+            sed -i "s/Version=\"[^\"]*\"/Version=\"$VERSION\"/g" packaging/windows/strata.wxs
+          fi
           wixl -a x64 --ext ui -I packaging/windows -o dist/strata.msi packaging/windows/strata.wxs
 
       - name: Upload Windows artifacts (.exe & .msi)
@@ -148,3 +147,37 @@ jobs:
         with:
           name: strata-windows
           path: dist/
+
+  release:
+    name: Publish Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: strata-linux
+          path: artifacts/linux
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: strata-windows
+          path: artifacts/windows
+
+      - name: Publish Forgejo Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          python3 scripts/publish-release.py
