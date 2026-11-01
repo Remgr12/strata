@@ -24,10 +24,12 @@ jobs:
           $SUDO apt-get update
           $SUDO apt-get install -y --no-install-recommends \
             curl \
+            python3 \
             zstd \
             flatpak \
             flatpak-builder \
             ostree \
+            librsvg2-common \
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxcb1-dev \
@@ -75,6 +77,70 @@ jobs:
         with:
           name: strata-linux
           path: dist/
+
+      - name: Prune unneeded build cache files
+        if: always()
+        run: |
+          rm -rf \
+            target/duckdb-sources \
+            target/*/duckdb-sources \
+            target/release/incremental \
+            target/*/release/incremental \
+            target/release/strata-app* \
+            target/*/release/strata-app* \
+            .flatpak-builder build-dir repo
+          python3 - <<'PY'
+          import glob, os, re, shutil
+
+          for pattern in [
+              "target/release/deps",
+              "target/*/release/deps",
+              "target/release/build",
+              "target/*/release/build",
+              "target/release/.fingerprint",
+              "target/*/release/.fingerprint",
+          ]:
+              for d in glob.glob(pattern):
+                  if not os.path.isdir(d):
+                      continue
+                  groups = {}
+                  for entry in os.listdir(d):
+                      m = re.match(r"^(.+)-([0-9a-f]{16})(\..+)?$", entry)
+                      if not m:
+                          continue
+                      prefix, h = m.group(1), m.group(2)
+                      path = os.path.join(d, entry)
+                      try:
+                          mtime = os.path.getmtime(path)
+                      except OSError:
+                          continue
+                      groups.setdefault(prefix, {}).setdefault(h, []).append((mtime, path))
+                  for prefix, hashes in groups.items():
+                      if len(hashes) <= 1:
+                          continue
+                      ranked = sorted(
+                          hashes.items(),
+                          key=lambda kv: max(mt for mt, _ in kv[1]),
+                          reverse=True,
+                      )
+                      for _, items in ranked[1:]:
+                          for _, path in items:
+                              if os.path.isdir(path):
+                                  shutil.rmtree(path, ignore_errors=True)
+                              elif os.path.exists(path):
+                                  os.remove(path)
+
+          cache_blobs = sorted(
+              [p for p in glob.glob("/runner-cache/actcache/cache/*/*") if os.path.isfile(p)],
+              key=os.path.getmtime,
+              reverse=True,
+          )
+          for stale in cache_blobs[2:]:
+              try:
+                  os.remove(stale)
+              except OSError:
+                  pass
+          PY
 
   build-windows:
     name: Cross-compile Windows (x86_64)
@@ -156,6 +222,69 @@ jobs:
         with:
           name: strata-windows
           path: dist/
+
+      - name: Prune unneeded build cache files
+        if: always()
+        run: |
+          rm -rf \
+            target/duckdb-sources \
+            target/*/duckdb-sources \
+            target/release/incremental \
+            target/*/release/incremental \
+            target/release/strata-app* \
+            target/*/release/strata-app*
+          python3 - <<'PY'
+          import glob, os, re, shutil
+
+          for pattern in [
+              "target/release/deps",
+              "target/*/release/deps",
+              "target/release/build",
+              "target/*/release/build",
+              "target/release/.fingerprint",
+              "target/*/release/.fingerprint",
+          ]:
+              for d in glob.glob(pattern):
+                  if not os.path.isdir(d):
+                      continue
+                  groups = {}
+                  for entry in os.listdir(d):
+                      m = re.match(r"^(.+)-([0-9a-f]{16})(\..+)?$", entry)
+                      if not m:
+                          continue
+                      prefix, h = m.group(1), m.group(2)
+                      path = os.path.join(d, entry)
+                      try:
+                          mtime = os.path.getmtime(path)
+                      except OSError:
+                          continue
+                      groups.setdefault(prefix, {}).setdefault(h, []).append((mtime, path))
+                  for prefix, hashes in groups.items():
+                      if len(hashes) <= 1:
+                          continue
+                      ranked = sorted(
+                          hashes.items(),
+                          key=lambda kv: max(mt for mt, _ in kv[1]),
+                          reverse=True,
+                      )
+                      for _, items in ranked[1:]:
+                          for _, path in items:
+                              if os.path.isdir(path):
+                                  shutil.rmtree(path, ignore_errors=True)
+                              elif os.path.exists(path):
+                                  os.remove(path)
+
+          cache_blobs = sorted(
+              [p for p in glob.glob("/runner-cache/actcache/cache/*/*") if os.path.isfile(p)],
+              key=os.path.getmtime,
+              reverse=True,
+          )
+          for stale in cache_blobs[2:]:
+              try:
+                  os.remove(stale)
+              except OSError:
+                  pass
+          PY
 
   release:
     name: Publish Release

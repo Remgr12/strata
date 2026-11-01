@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.0.5" date="2026-11-01">
+      <description>
+        <p>CI pipeline optimization with runner cache pruning and build maintenance.</p>
+      </description>
+    </release>
     <release version="0.0.4" date="2026-11-01">
       <description>
         <p>Complete UI redesign with integrated custom titlebar window controls, static MinGW runtime bundling on Windows, Linux Flatpak distribution, and automatic release update checking.</p>

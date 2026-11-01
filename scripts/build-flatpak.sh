@@ -60,7 +60,7 @@ mkdir -p "$(dirname "$OUT_BUNDLE")"
 
 if command -v flatpak >/dev/null 2>&1 && command -v ostree >/dev/null 2>&1; then
     ostree init --mode=archive-z2 --repo="$REPO_DIR"
-    flatpak build-export --arch="$ARCH" "$REPO_DIR" "$BUILD_DIR" stable
+    flatpak build-export --disable-sandbox --arch="$ARCH" "$REPO_DIR" "$BUILD_DIR" stable
     flatpak build-bundle --arch="$ARCH" \
         --repo-url="https://git.soventa.tech/moha/strata/releases" \
         "$REPO_DIR" "$OUT_BUNDLE" "$APP_ID" stable

@@ -12,7 +12,7 @@
   <p>
     <a href="#credits"><img alt="Lead developer" src="https://img.shields.io/badge/lead%20developer-Zsombor%20Simon-58a9ff" /></a>
     <a href="https://git.soventa.tech/moha/strata"><img alt="Repository" src="https://img.shields.io/badge/forgejo-git.soventa.tech-58a9ff" /></a>
-    <a href="https://git.soventa.tech/moha/strata/releases"><img alt="Release" src="https://img.shields.io/badge/release-v0.0.4-58a9ff" /></a>
+    <a href="https://git.soventa.tech/moha/strata/releases"><img alt="Release" src="https://img.shields.io/badge/release-v0.0.5-58a9ff" /></a>
     <a href="#license"><img alt="License" src="https://img.shields.io/badge/license-MIT-9e6bfa" /></a>
   </p>
 </div>
@@ -131,6 +131,8 @@ flatpak install --user -y --bundle dist/strata-linux-x86_64.flatpak
 
 ## Release History
 
+- **v0.0.5** - CI runner cache pruning and build pipeline maintenance:
+  - Add automated cache cleaning steps to Linux and Windows CI workflows to prune stale incremental artifacts, intermediate DuckDB source trees, and actcache runner blobs.
 - **v0.0.4** - Complete UI redesign & cross-platform distribution upgrade:
   - **Windows static runtime bundling & GUI subsystem**: Statically link `libwinpthread-1.dll`, `libstdc++-6.dll`, and `libgcc_s_seh-1.dll` directly into `strata.exe` via `crates/app/build.rs`, strip `.rsrc` version headers from bundled MSI DLL copies so Windows Installer never skips `libwinpthread-1.dll` on upgrade, and configure `windows_subsystem = "windows"` so no `cmd.exe` console window appears on launch.
   - **Linux Flatpak support**: Add `tech.soventa.strata` Flatpak manifest, AppStream metainfo, desktop integration, and automated `.flatpak` single-file bundle creation in CI.
