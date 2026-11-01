@@ -58,7 +58,7 @@ jobs:
           cp target/release/strata-app dist/strata-linux
 
       - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: strata-linux
           path: dist/strata-linux
@@ -102,7 +102,7 @@ jobs:
           wixl -o dist/strata.msi packaging/windows/strata.wxs
 
       - name: Upload Windows artifacts (.exe & .msi)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: strata-windows
           path: dist/
