@@ -2,11 +2,42 @@ mod state;
 mod views;
 
 use gpui::{
-    actions, div, prelude::*, px, rgb, size, App, Application, Bounds, Context, Entity,
-    ExternalPaths, KeyBinding, Window, WindowBounds, WindowOptions,
+    actions, div, img, prelude::*, px, rgb, size, App, Application, AssetSource, Bounds, Context,
+    Entity, ExternalPaths, KeyBinding, SharedString, Window, WindowBounds, WindowOptions,
 };
 use state::{ActiveTab, AppState};
 use views::{DiffView, QueryView, SchemaTreeView, TableView};
+
+struct StrataAssets;
+
+impl AssetSource for StrataAssets {
+    fn load(&self, path: &str) -> anyhow::Result<Option<std::borrow::Cow<'static, [u8]>>> {
+        match path {
+            "icons/dark-mode.svg" | "icons/logo-dark.svg" | "dark-mode.svg" => {
+                Ok(Some(std::borrow::Cow::Borrowed(include_bytes!(
+                    "../../../assets/dark-mode.svg"
+                ))))
+            }
+            "icons/light-mode.svg" | "icons/logo-light.svg" | "light-mode.svg" => {
+                Ok(Some(std::borrow::Cow::Borrowed(include_bytes!(
+                    "../../../assets/light-mode.svg"
+                ))))
+            }
+            "icons/icon.png" | "icon.png" => Ok(Some(std::borrow::Cow::Borrowed(include_bytes!(
+                "../../../assets/icon.png"
+            )))),
+            _ => Ok(None),
+        }
+    }
+
+    fn list(&self, _path: &str) -> anyhow::Result<Vec<SharedString>> {
+        Ok(vec![
+            "icons/dark-mode.svg".into(),
+            "icons/light-mode.svg".into(),
+            "icons/icon.png".into(),
+        ])
+    }
+}
 
 actions!(strata, [ExecuteQuery, SwitchToQueryTab, SwitchToDiffTab]);
 
@@ -105,13 +136,18 @@ impl Render for MainView {
                                 div()
                                     .flex()
                                     .items_center()
-                                    .gap_1()
+                                    .gap_2()
+                                    .child(
+                                        img("icons/dark-mode.svg")
+                                            .size_6()
+                                            .flex_shrink_0(),
+                                    )
                                     .child(
                                         div()
                                             .font_weight(gpui::FontWeight::EXTRA_BOLD)
                                             .text_base()
                                             .text_color(rgb(0xcba6f7))
-                                            .child("⛰️ STRATA"),
+                                            .child("STRATA"),
                                     ),
                             )
                             .child(
@@ -230,7 +266,9 @@ impl Render for MainView {
 fn main() {
     env_logger::init();
 
-    Application::new().run(|cx: &mut App| {
+    Application::new()
+        .with_assets(StrataAssets)
+        .run(|cx: &mut App| {
         // Register keybindings
         cx.bind_keys([
             KeyBinding::new("ctrl-enter", ExecuteQuery, None),

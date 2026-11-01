@@ -1,4 +1,10 @@
 <div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/dark-mode.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/light-mode.svg" />
+    <img alt="strata" src="assets/dark-mode.svg" width="160" />
+  </picture>
+
   <h1>strata</h1>
 
   <p><strong>A native, GPU-accelerated local database client and schema diffing utility.</strong></p>

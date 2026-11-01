@@ -14,6 +14,9 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of Strata is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
+    <Icon Id="strata.ico" SourceFile="packaging/windows/icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="strata.ico" />
+
     <UIRef Id="WixUI_Minimal" />
 
     <Feature Id="ProductFeature" Title="Strata" Level="1">
@@ -64,13 +67,15 @@
                   Name="Strata"
                   Description="Native GPU-accelerated desktop database client"
                   Target="[INSTALLFOLDER]strata.exe"
-                  WorkingDirectory="INSTALLFOLDER" />
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="strata.ico" />
         <Shortcut Id="ApplicationDesktopShortcut"
                   Directory="DesktopFolder"
                   Name="Strata"
                   Description="Native GPU-accelerated desktop database client"
                   Target="[INSTALLFOLDER]strata.exe"
-                  WorkingDirectory="INSTALLFOLDER" />
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="strata.ico" />
         <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\Strata" Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Strata
+GenericName=Database Client
+Comment=Native GPU-accelerated local database client and schema diffing utility
+Exec=strata %F
+Icon=strata
+Terminal=false
+Type=Application
+Categories=Development;Database;
+MimeType=application/x-sqlite3;application/vnd.sqlite3;
+Keywords=database;sqlite;duckdb;parquet;sql;diff;schema;
+StartupNotify=true

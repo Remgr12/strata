@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <!-- Light Mode Substrate -->
+  <rect width="500" height="500" fill="#D4DFE6" />
+
+  <!-- Left Hardware Loop (Steel Indigo) -->
+  <path d="M 154 226 
+           A 32 32 0 0 0 122 258 
+           L 122 314 
+           A 32 32 0 0 1 58 314 
+           L 58 258 
+           A 104 104 0 0 1 256 213.5" 
+        fill="none" 
+        stroke="#26466D" 
+        stroke-width="38" 
+        stroke-linecap="butt" />
+
+  <!-- Right Software Wave & Ring (Faded Ice Cyan) -->
+  <path d="M 154 226 
+           A 32 32 0 0 1 186 258 
+           L 186 314 
+           A 32 32 0 0 0 250 314 
+           L 250 250" 
+        fill="none" 
+        stroke="#6B9DA8" 
+        stroke-width="38" 
+        stroke-linecap="butt" />
+        
+  <circle cx="346" cy="250" r="96" 
+          fill="none" 
+          stroke="#6B9DA8" 
+          stroke-width="38" />
+
+  <!-- Protected Core Node (Soft Dried Apricot) -->
+  <circle cx="346" cy="250" r="50" fill="#E08A63" />
+</svg>
